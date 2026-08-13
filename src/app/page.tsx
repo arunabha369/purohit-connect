@@ -1,101 +1,63 @@
-import Image from "next/image";
+import { AppShell } from "@/components/layout/app-shell";
+import { SearchHero } from "@/components/home/search-hero";
+import { CategoryGrid } from "@/components/home/category-grid";
+import { BannerCarousel } from "@/components/home/banner-carousel";
+import { PopularServices } from "@/components/home/popular-services";
+import { PurohitCards } from "@/components/home/purohit-cards";
 
-export default function Home() {
+export default function HomePage() {
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="https://nextjs.org/icons/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+    <AppShell>
+      <SearchHero />
+      <BannerCarousel />
+      <CategoryGrid />
+      <PopularServices />
+      <PurohitCards />
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="https://nextjs.org/icons/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+      {/* Footer */}
+      <footer className="bg-charcoal text-cream-200 px-4 py-12 mt-8">
+        <div className="max-w-7xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-8">
+          <div>
+            <h4 className="font-heading font-bold text-white text-lg mb-4">
+              Purohit<span className="text-saffron-400">Connect</span>
+            </h4>
+            <p className="text-sm text-cream-400 leading-relaxed">
+              India&apos;s trusted platform for booking verified purohits for all
+              Vedic ceremonies and rituals.
+            </p>
+          </div>
+          <div>
+            <h5 className="font-semibold text-white text-sm mb-3">Services</h5>
+            <ul className="space-y-2 text-sm text-cream-400">
+              <li>Griha Pravesh</li>
+              <li>Wedding Ceremony</li>
+              <li>Satyanarayan Puja</li>
+              <li>Havan / Homam</li>
+            </ul>
+          </div>
+          <div>
+            <h5 className="font-semibold text-white text-sm mb-3">Company</h5>
+            <ul className="space-y-2 text-sm text-cream-400">
+              <li>About Us</li>
+              <li>Careers</li>
+              <li>Blog</li>
+              <li>Contact</li>
+            </ul>
+          </div>
+          <div>
+            <h5 className="font-semibold text-white text-sm mb-3">Support</h5>
+            <ul className="space-y-2 text-sm text-cream-400">
+              <li>Help Center</li>
+              <li>Safety</li>
+              <li>Terms of Service</li>
+              <li>Privacy Policy</li>
+            </ul>
+          </div>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
+        <div className="max-w-7xl mx-auto mt-8 pt-6 border-t border-white/10 text-center text-xs text-cream-400">
+          © 2025 PurohitConnect. All rights reserved. Made with 🙏 in India.
+        </div>
       </footer>
-    </div>
+    </AppShell>
   );
 }
