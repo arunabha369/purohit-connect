@@ -2,67 +2,65 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Search, CalendarDays, User } from "lucide-react";
+import { CalendarDays, Home, Search, User } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useApp } from "@/lib/booking-context";
+import { isActiveBooking } from "@/lib/booking-status";
+import { isNavActive } from "./site-header";
 
 const tabs = [
   { href: "/", label: "Home", icon: Home },
-  { href: "/search", label: "Search", icon: Search },
+  { href: "/search", label: "Explore", icon: Search },
   { href: "/bookings", label: "Bookings", icon: CalendarDays },
   { href: "/profile", label: "Profile", icon: User },
 ];
 
 export function BottomNav() {
   const pathname = usePathname();
-
-  if (
-    pathname.startsWith("/purohit-dashboard") ||
-    pathname.startsWith("/admin") ||
-    pathname.startsWith("/login")
-  ) {
-    return null;
-  }
+  const { bookings } = useApp();
+  const activeCount = bookings.filter((b) => isActiveBooking(b.status)).length;
 
   return (
-    <div className="fixed bottom-4 left-4 right-4 z-50 md:hidden">
-      <nav className="mx-auto max-w-sm rounded-full bg-black/40 backdrop-blur-2xl border border-white/[0.08] px-2 py-2">
-        <div className="flex items-center justify-around">
-          {tabs.map((tab) => {
-            const isActive =
-              tab.href === "/"
-                ? pathname === "/"
-                : pathname.startsWith(tab.href);
-            return (
+    <nav
+      aria-label="Primary"
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/85 pb-safe backdrop-blur-xl md:hidden"
+    >
+      <ul className="mx-auto grid h-(--bottom-nav-height) max-w-md grid-cols-4">
+        {tabs.map((tab) => {
+          const active = isNavActive(pathname, tab.href);
+          const showBadge = tab.href === "/bookings" && activeCount > 0;
+          return (
+            <li key={tab.href}>
               <Link
-                key={tab.href}
                 href={tab.href}
+                aria-current={active ? "page" : undefined}
                 className={cn(
-                  "relative flex flex-col items-center justify-center gap-0.5 px-4 py-2 rounded-full transition-all",
-                  isActive
-                    ? "text-maroon-800 bg-maroon-800/10"
-                    : "text-white/40 hover:text-white/60"
+                  "relative flex h-full flex-col items-center justify-center gap-1 text-[0.6875rem] font-medium transition-colors",
+                  active ? "text-primary" : "text-muted-foreground active:text-foreground"
                 )}
               >
-                <tab.icon
-                  className={cn(
-                    "w-5 h-5",
-                    isActive && "drop-shadow-[0_0_6px_rgba(212,168,67,0.4)]"
-                  )}
-                  strokeWidth={isActive ? 2.5 : 1.5}
-                />
                 <span
+                  aria-hidden
                   className={cn(
-                    "text-[9px]",
-                    isActive ? "font-bold" : "font-medium"
+                    "absolute top-0 h-0.5 w-8 rounded-full bg-primary transition-opacity",
+                    active ? "opacity-100" : "opacity-0"
                   )}
-                >
-                  {tab.label}
+                />
+                <span className="relative">
+                  <tab.icon className="size-[1.375rem]" strokeWidth={active ? 2.25 : 1.75} />
+                  {showBadge && (
+                    <span className="absolute -top-1.5 -right-2.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[0.625rem] font-bold text-primary-foreground">
+                      {activeCount}
+                      <span className="sr-only"> active bookings</span>
+                    </span>
+                  )}
                 </span>
+                {tab.label}
               </Link>
-            );
-          })}
-        </div>
-      </nav>
-    </div>
+            </li>
+          );
+        })}
+      </ul>
+    </nav>
   );
 }

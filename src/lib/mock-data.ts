@@ -15,6 +15,8 @@ export interface Purohit {
   certificates: string[];
   available: boolean;
   gallery: string[];
+  completedPujas: number;
+  responseTime: string;
 }
 
 export interface Service {
@@ -61,7 +63,8 @@ export interface Category {
   name: string;
   icon: string;
   count: number;
-  color: string;
+  /** Matches the value used in `Purohit.specializations`. */
+  specialization: string;
 }
 
 export interface UserProfile {
@@ -77,18 +80,18 @@ export interface UserProfile {
 
 // ── Categories ──
 export const categories: Category[] = [
-  { id: "griha-pravesh", name: "Griha Pravesh", icon: "Home", count: 45, color: "bg-maroon-200 text-maroon-800" },
-  { id: "satyanarayan", name: "Satyanarayan Puja", icon: "Sun", count: 62, color: "bg-saffron-200 text-saffron-400" },
-  { id: "wedding", name: "Vivah (Wedding)", icon: "Heart", count: 38, color: "bg-red-900/40 text-red-400" },
-  { id: "mundan", name: "Mundan Sanskar", icon: "Scissors", count: 29, color: "bg-gold-200 text-gold-400" },
-  { id: "naamkaran", name: "Naamkaran", icon: "Baby", count: 34, color: "bg-blue-900/40 text-blue-400" },
-  { id: "ganesh-puja", name: "Ganesh Puja", icon: "Flower2", count: 51, color: "bg-orange-900/40 text-orange-400" },
-  { id: "navgraha", name: "Navgraha Shanti", icon: "Star", count: 23, color: "bg-purple-900/40 text-purple-400" },
-  { id: "vastu", name: "Vastu Puja", icon: "Compass", count: 19, color: "bg-emerald-900/40 text-emerald-400" },
-  { id: "shradh", name: "Shradh Karma", icon: "Flame", count: 27, color: "bg-cream-300 text-cream-400" },
-  { id: "rudrabhishek", name: "Rudrabhishek", icon: "Droplets", count: 31, color: "bg-cyan-900/40 text-cyan-400" },
-  { id: "sundarkand", name: "Sundarkand Path", icon: "BookOpen", count: 42, color: "bg-amber-900/40 text-amber-400" },
-  { id: "havan", name: "Havan/Homam", icon: "Flame", count: 55, color: "bg-rose-900/40 text-rose-400" },
+  { id: "griha-pravesh", name: "Griha Pravesh", icon: "Home", count: 45, specialization: "Griha Pravesh" },
+  { id: "satyanarayan", name: "Satyanarayan Puja", icon: "Sun", count: 62, specialization: "Satyanarayan Puja" },
+  { id: "wedding", name: "Vivah (Wedding)", icon: "Heart", count: 38, specialization: "Vivah Sanskar" },
+  { id: "mundan", name: "Mundan Sanskar", icon: "Scissors", count: 29, specialization: "Mundan Sanskar" },
+  { id: "naamkaran", name: "Naamkaran", icon: "Baby", count: 34, specialization: "Naamkaran" },
+  { id: "ganesh-puja", name: "Ganesh Puja", icon: "Flower2", count: 51, specialization: "Ganesh Puja" },
+  { id: "navgraha", name: "Navgraha Shanti", icon: "Star", count: 23, specialization: "Navgraha Shanti" },
+  { id: "vastu", name: "Vastu Puja", icon: "Compass", count: 19, specialization: "Vastu Puja" },
+  { id: "shradh", name: "Shradh Karma", icon: "Flame", count: 27, specialization: "Shradh Karma" },
+  { id: "rudrabhishek", name: "Rudrabhishek", icon: "Droplets", count: 31, specialization: "Rudrabhishek" },
+  { id: "sundarkand", name: "Sundarkand Path", icon: "BookOpen", count: 42, specialization: "Sundarkand Path" },
+  { id: "havan", name: "Havan/Homam", icon: "Flame", count: 55, specialization: "Havan/Homam" },
 ];
 
 // ── Services ──
@@ -244,6 +247,8 @@ export const purohits: Purohit[] = [
     certificates: ["Vedacharya - BHU", "Jyotish Visharad"],
     available: true,
     gallery: [],
+    completedPujas: 5000,
+    responseTime: "1 hour",
   },
   {
     id: "pt-002",
@@ -260,6 +265,8 @@ export const purohits: Purohit[] = [
     certificates: ["Shastri - Kashi Vidyapeeth", "Karmakandi Certification"],
     available: true,
     gallery: [],
+    completedPujas: 3200,
+    responseTime: "2 hours",
   },
   {
     id: "pt-003",
@@ -276,6 +283,8 @@ export const purohits: Purohit[] = [
     certificates: ["Vedanta Studies - Chinmaya Mission"],
     available: true,
     gallery: [],
+    completedPujas: 2800,
+    responseTime: "30 mins",
   },
   {
     id: "pt-004",
@@ -292,6 +301,8 @@ export const purohits: Purohit[] = [
     certificates: ["Acharya - Lucknow University", "Paurohitya Diploma"],
     available: true,
     gallery: [],
+    completedPujas: 4100,
+    responseTime: "1 hour",
   },
   {
     id: "pt-005",
@@ -308,6 +319,8 @@ export const purohits: Purohit[] = [
     certificates: ["Vastu Visharad", "Jyotish Ratna"],
     available: false,
     gallery: [],
+    completedPujas: 1500,
+    responseTime: "3 hours",
   },
   {
     id: "pt-006",
@@ -324,6 +337,8 @@ export const purohits: Purohit[] = [
     certificates: ["Vedacharya - Sampurnanand Sanskrit University"],
     available: true,
     gallery: [],
+    completedPujas: 3600,
+    responseTime: "45 mins",
   },
   {
     id: "pt-007",
@@ -340,6 +355,8 @@ export const purohits: Purohit[] = [
     certificates: ["Shastri - Calcutta Sanskrit College", "Karmakandi Expert"],
     available: true,
     gallery: [],
+    completedPujas: 6200,
+    responseTime: "2 hours",
   },
   {
     id: "pt-008",
@@ -356,6 +373,8 @@ export const purohits: Purohit[] = [
     certificates: ["Acharya - BHU", "Wedding Specialist Certification"],
     available: true,
     gallery: [],
+    completedPujas: 2200,
+    responseTime: "30 mins",
   },
 ];
 
@@ -506,16 +525,21 @@ export const mockUser: UserProfile = {
 export const cities = ["Delhi", "Mumbai", "Varanasi", "Bengaluru", "Jaipur", "Lucknow", "Kolkata", "Pune", "Hyderabad", "Chennai"];
 
 // ── Time Slots ──
-export const timeSlots = [
-  "6:00 AM - 8:00 AM",
-  "8:00 AM - 10:00 AM",
-  "9:00 AM - 12:00 PM",
-  "10:00 AM - 1:00 PM",
-  "2:00 PM - 4:00 PM",
-  "4:00 PM - 6:00 PM",
-  "5:00 PM - 7:00 PM",
-  "6:00 PM - 8:00 PM",
+export type DayPeriod = "Morning" | "Afternoon" | "Evening";
+
+export const timeSlots: { label: string; period: DayPeriod }[] = [
+  { label: "6:00 AM - 8:00 AM", period: "Morning" },
+  { label: "8:00 AM - 10:00 AM", period: "Morning" },
+  { label: "9:00 AM - 12:00 PM", period: "Morning" },
+  { label: "10:00 AM - 1:00 PM", period: "Morning" },
+  { label: "2:00 PM - 4:00 PM", period: "Afternoon" },
+  { label: "4:00 PM - 6:00 PM", period: "Afternoon" },
+  { label: "5:00 PM - 7:00 PM", period: "Evening" },
+  { label: "6:00 PM - 8:00 PM", period: "Evening" },
 ];
+
+// ── Pricing ──
+export const PLATFORM_FEE = 99;
 
 // ── Admin Stats ──
 export const adminStats = {
@@ -594,3 +618,62 @@ export const purohitDashboardData = {
     { id: "UB-003", service: "Ganesh Puja", date: "2025-03-15", client: "Priya Singh", location: "Noida" },
   ],
 };
+
+export const purohitWeeklyEarnings = [
+  { day: "Mon", earnings: 4200 },
+  { day: "Tue", earnings: 3100 },
+  { day: "Wed", earnings: 6800 },
+  { day: "Thu", earnings: 2500 },
+  { day: "Fri", earnings: 5100 },
+  { day: "Sat", earnings: 9600 },
+  { day: "Sun", earnings: 8200 },
+];
+
+// ── Admin: registered users ──
+export interface AdminUser {
+  id: string;
+  name: string;
+  phone: string;
+  city: string;
+  bookings: number;
+  joined: string;
+  status: "active" | "suspended";
+}
+
+export const adminUsers: AdminUser[] = [
+  { id: "u-1001", name: "Rajesh Kumar", phone: "+91 98110 22345", city: "Delhi", bookings: 6, joined: "2024-03-12", status: "active" },
+  { id: "u-1002", name: "Priya Agarwal", phone: "+91 99870 11223", city: "Mumbai", bookings: 3, joined: "2024-05-02", status: "active" },
+  { id: "u-1003", name: "Amit Verma", phone: "+91 97180 55432", city: "Noida", bookings: 2, joined: "2024-06-18", status: "active" },
+  { id: "u-1004", name: "Sneha Patil", phone: "+91 98200 77881", city: "Pune", bookings: 4, joined: "2024-07-09", status: "active" },
+  { id: "u-1005", name: "Vikash Gupta", phone: "+91 90080 44567", city: "Bengaluru", bookings: 1, joined: "2024-08-21", status: "suspended" },
+  { id: "u-1006", name: "Ritika Banerjee", phone: "+91 98300 66712", city: "Kolkata", bookings: 5, joined: "2024-09-03", status: "active" },
+  { id: "u-1007", name: "Nikhil Pandey", phone: "+91 94150 33890", city: "Lucknow", bookings: 2, joined: "2024-10-14", status: "active" },
+  { id: "u-1008", name: "Meera Sharma", phone: "+91 98290 12098", city: "Jaipur", bookings: 3, joined: "2024-11-27", status: "active" },
+];
+
+// ── Lookup helpers ──
+export function getPurohit(id: string | undefined) {
+  return purohits.find((p) => p.id === id);
+}
+
+export function getService(id: string | undefined) {
+  return services.find((s) => s.id === id);
+}
+
+export function getCategory(id: string | undefined) {
+  return categories.find((c) => c.id === id);
+}
+
+/** Services a purohit performs, based on their specializations. */
+export function getServicesForPurohit(purohit: Purohit) {
+  const categoryIds = new Set(
+    categories
+      .filter((c) => purohit.specializations.includes(c.specialization))
+      .map((c) => c.id)
+  );
+  return services.filter((s) => categoryIds.has(s.category));
+}
+
+export function getReviewsForPurohit(id: string) {
+  return reviews.filter((r) => r.purohitId === id);
+}

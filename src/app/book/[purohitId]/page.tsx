@@ -1,563 +1,774 @@
 "use client";
 
+import Link from "next/link";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useRef, useState } from "react";
+import { format, isToday, isTomorrow } from "date-fns";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Banknote,
+  CalendarDays,
+  Check,
+  CheckCircle2,
+  Clock,
+  Copy,
+  CreditCard,
+  Home,
+  Loader2,
+  MapPin,
+  Moon,
+  Plus,
+  ShieldCheck,
+  Smartphone,
+  Sun,
+  Sunrise,
+  UserX,
+  Wallet,
+} from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
-import { purohits, services, timeSlots, mockUser } from "@/lib/mock-data";
-import { useApp } from "@/lib/booking-context";
-import { useParams, useRouter } from "next/navigation";
-import { useState } from "react";
-import { Button } from "@/components/ui/button";
+import { bookingTotal, useApp } from "@/lib/booking-context";
+import {
+  DayPeriod,
+  PLATFORM_FEE,
+  getPurohit,
+  getService,
+  getServicesForPurohit,
+  timeSlots,
+} from "@/lib/mock-data";
+import { isSlotAvailable, upcomingDays } from "@/lib/availability";
+import { formatDate, formatINR, toISODate } from "@/lib/format";
+import { useMounted } from "@/lib/use-mounted";
+import { cn } from "@/lib/utils";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Badge } from "@/components/ui/badge";
-import { Calendar } from "@/components/ui/calendar";
-import { Separator } from "@/components/ui/separator";
-import {
-  ChevronLeft,
-  Check,
-  Calendar as CalendarIcon,
-  Clock,
-  MapPin,
-  CreditCard,
-  Smartphone,
-  Wallet,
-  Upload,
-  IndianRupee,
-  CheckCircle2,
-  PartyPopper,
-} from "lucide-react";
-import { cn } from "@/lib/utils";
-import Link from "next/link";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Checkbox } from "@/components/ui/checkbox";
+import { toast } from "@/components/ui/toast";
+import { BackLink } from "@/components/shared/page-header";
+import { DetailRow, Panel } from "@/components/shared/panel";
+import { EmptyState } from "@/components/shared/empty-state";
+import { PurohitAvatar } from "@/components/shared/purohit-avatar";
+import { RatingBadge } from "@/components/shared/rating";
+import { ServiceIcon } from "@/components/shared/service-icon";
 
-const steps = [
-  { label: "Service & Time", icon: CalendarIcon },
-  { label: "Address", icon: MapPin },
-  { label: "Payment", icon: CreditCard },
-  { label: "Confirmation", icon: Check },
-];
+const steps = ["Ceremony", "Date & time", "Venue", "Payment"] as const;
 
-export default function BookingPage() {
-  const { purohitId } = useParams();
-  const router = useRouter();
-  const { addBooking } = useApp();
-  const purohit = purohits.find((p) => p.id === purohitId);
+const periodIcons: Record<DayPeriod, React.ComponentType<{ className?: string }>> = {
+  Morning: Sunrise,
+  Afternoon: Sun,
+  Evening: Moon,
+};
 
-  const [step, setStep] = useState(0);
-  const [selectedService, setSelectedService] = useState("");
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>();
-  const [selectedTime, setSelectedTime] = useState("");
-  const [address, setAddress] = useState(mockUser.addresses[0]?.address || "");
-  const [city, setCity] = useState(mockUser.city);
-  const [notes, setNotes] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState("upi");
-  const [bookingId, setBookingId] = useState("");
+const paymentMethods = [
+  { id: "UPI", label: "UPI", hint: "Google Pay, PhonePe, Paytm & more", icon: Smartphone },
+  { id: "Card", label: "Credit or debit card", hint: "Visa, Mastercard, RuPay", icon: CreditCard },
+  { id: "Wallet", label: "PurohitConnect wallet", hint: "", icon: Wallet },
+  { id: "Pay later", label: "Pay after the ceremony", hint: "Cash or UPI to the purohit", icon: Banknote },
+] as const;
 
-  if (!purohit) {
-    return (
-      <AppShell>
-        <div className="text-center py-20">
-          <p className="text-4xl mb-3">😕</p>
-          <h2 className="font-heading font-semibold text-xl">
-            Purohit not found
-          </h2>
-          <Link href="/search" className="text-maroon-800 text-sm mt-2 block">
-            ← Back to Search
-          </Link>
-        </div>
-      </AppShell>
-    );
-  }
+/** "Flat 302, Sunrise Apts, Sector 62, Noida, UP 201301" → "Noida" */
+function cityFromAddress(address: string) {
+  const parts = address.split(",").map((p) => p.trim());
+  return parts.length >= 2 ? parts[parts.length - 2] : parts[0];
+}
 
-  const purohitServices = services.filter(
-    (s) =>
-      purohit.specializations.some(
-        (spec) =>
-          s.name.toLowerCase().includes(spec.toLowerCase()) ||
-          spec.toLowerCase().includes(s.category)
-      ) || true
-  );
+function dayLabel(d: Date) {
+  if (isToday(d)) return "Today";
+  if (isTomorrow(d)) return "Tomorrow";
+  return format(d, "EEE");
+}
 
-  const selectedServiceData = services.find((s) => s.id === selectedService);
-
-  const handleNext = () => {
-    if (step < 3) setStep(step + 1);
-  };
-
-  const handleBack = () => {
-    if (step > 0) setStep(step - 1);
-  };
-
-  const handleConfirm = () => {
-    const booking = addBooking({
-      purohitId: purohit.id,
-      serviceId: selectedService,
-      date: selectedDate?.toISOString().split("T")[0] || "",
-      timeSlot: selectedTime,
-      address,
-      city,
-      notes,
-      paymentMethod,
-    });
-    setBookingId(booking.id);
-    setStep(3);
-  };
-
-  const canProceed = () => {
-    switch (step) {
-      case 0:
-        return selectedService && selectedDate && selectedTime;
-      case 1:
-        return address.trim().length > 5;
-      case 2:
-        return paymentMethod;
-      default:
-        return true;
-    }
-  };
-
+function Stepper({ step }: { step: number }) {
   return (
-    <AppShell>
-      <div className="max-w-2xl mx-auto px-4 py-6">
-        {/* Back */}
-        {step < 3 && (
-          <button
-            onClick={step === 0 ? () => router.back() : handleBack}
-            className="inline-flex items-center gap-1 text-sm text-cream-400 hover:text-charcoal mb-4"
-          >
-            <ChevronLeft className="w-4 h-4" />
-            {step === 0 ? "Back" : "Previous Step"}
-          </button>
-        )}
-
-        {/* Progress Stepper */}
-        <div className="flex items-center justify-between mb-8">
-          {steps.map((s, i) => (
-            <div key={i} className="flex items-center flex-1">
-              <div className="flex flex-col items-center">
-                <div
-                  className={cn(
-                    "w-10 h-10 rounded-full flex items-center justify-center text-sm font-semibold transition-all",
-                    i < step
-                      ? "bg-emerald-500 text-white"
-                      : i === step
-                        ? "bg-maroon-800 text-white shadow-lg shadow-maroon-800/25"
-                        : "bg-cream-200 text-gray-400"
-                  )}
-                >
-                  {i < step ? (
-                    <Check className="w-5 h-5" />
-                  ) : (
-                    <s.icon className="w-4 h-4" />
-                  )}
-                </div>
+    <div>
+      <div className="flex items-center justify-between text-sm sm:hidden">
+        <span className="font-medium text-foreground">{steps[step]}</span>
+        <span className="text-muted-foreground">
+          Step {step + 1} of {steps.length}
+        </span>
+      </div>
+      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-surface sm:hidden" aria-hidden>
+        <div
+          className="h-full rounded-full bg-primary transition-[width] duration-500"
+          style={{ width: `${((step + 1) / steps.length) * 100}%` }}
+        />
+      </div>
+      <ol className="hidden items-center sm:flex" aria-label="Booking progress">
+        {steps.map((label, i) => {
+          const done = i < step;
+          const current = i === step;
+          return (
+            <li key={label} className="flex flex-1 items-center last:flex-none">
+              <div className="flex items-center gap-2.5" aria-current={current ? "step" : undefined}>
                 <span
                   className={cn(
-                    "text-[10px] mt-1.5 font-medium",
-                    i <= step ? "text-charcoal" : "text-gray-400"
+                    "flex size-8 shrink-0 items-center justify-center rounded-full text-sm font-semibold transition-colors",
+                    done && "bg-primary text-primary-foreground",
+                    current && "bg-primary/15 text-primary ring-2 ring-primary",
+                    !done && !current && "bg-surface text-muted-foreground ring-1 ring-border-strong"
                   )}
                 >
-                  {s.label}
+                  {done ? <Check className="size-4" /> : i + 1}
+                </span>
+                <span
+                  className={cn(
+                    "text-sm font-medium whitespace-nowrap",
+                    current || done ? "text-foreground" : "text-muted-foreground"
+                  )}
+                >
+                  {label}
                 </span>
               </div>
               {i < steps.length - 1 && (
-                <div
-                  className={cn(
-                    "flex-1 h-0.5 mx-2 rounded",
-                    i < step ? "bg-emerald-500" : "bg-cream-200"
-                  )}
+                <span
+                  aria-hidden
+                  className={cn("mx-4 h-px flex-1 transition-colors", done ? "bg-primary" : "bg-border-strong")}
                 />
               )}
-            </div>
-          ))}
+            </li>
+          );
+        })}
+      </ol>
+    </div>
+  );
+}
+
+function OptionCard({
+  selected,
+  disabled,
+  onSelect,
+  children,
+  className,
+}: {
+  selected: boolean;
+  disabled?: boolean;
+  onSelect: () => void;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={selected}
+      disabled={disabled}
+      onClick={onSelect}
+      className={cn(
+        "relative w-full rounded-2xl border p-4 text-left transition-[border-color,background-color,box-shadow] disabled:cursor-not-allowed disabled:opacity-45",
+        selected
+          ? "border-primary bg-primary/[0.07] shadow-[0_0_0_1px_var(--primary)]"
+          : "border-border bg-surface/40 hover:border-border-strong hover:bg-surface",
+        className
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+function BookingFlow() {
+  const { purohitId } = useParams<{ purohitId: string }>();
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const mounted = useMounted();
+  const { addBooking, addresses, addAddress, walletBalance } = useApp();
+
+  const purohit = getPurohit(purohitId);
+  const offered = purohit ? getServicesForPurohit(purohit) : [];
+  const preselected = offered.find((s) => s.id === searchParams.get("service"))?.id;
+
+  const [step, setStep] = useState(0);
+  const [serviceId, setServiceId] = useState(preselected ?? "");
+  const [date, setDate] = useState("");
+  const [slot, setSlot] = useState("");
+  const [addressId, setAddressId] = useState(
+    addresses.find((a) => a.isDefault)?.id ?? addresses[0]?.id ?? "new"
+  );
+  const [newAddress, setNewAddress] = useState({ line: "", city: "", pincode: "", label: "Home" });
+  const [saveAddress, setSaveAddress] = useState(true);
+  const [showAddressErrors, setShowAddressErrors] = useState(false);
+  const [notes, setNotes] = useState("");
+  const [payment, setPayment] = useState<string>("UPI");
+  const [processing, setProcessing] = useState(false);
+  const [confirmedId, setConfirmedId] = useState<string | null>(null);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+
+  // Move focus to the new step's heading for keyboard and screen-reader users.
+  useEffect(() => {
+    if (!mounted) return;
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    headingRef.current?.focus({ preventScroll: true });
+  }, [step, mounted]);
+
+  if (!purohit || !purohit.available) {
+    return (
+      <div className="container-page py-16">
+        <EmptyState
+          icon={UserX}
+          title={purohit ? `${purohit.name} isn't taking bookings` : "Purohit not found"}
+          description="Browse other verified purohits who are available for your ceremony."
+          action={
+            <Link href="/search" className={buttonVariants()}>
+              Browse purohits
+            </Link>
+          }
+        />
+      </div>
+    );
+  }
+
+  const service = getService(serviceId);
+  const days = mounted ? upcomingDays(14) : [];
+  const selectedAddress = addresses.find((a) => a.id === addressId);
+  const addressErrors = {
+    line: newAddress.line.trim().length < 10 ? "Enter the full address, including house and street" : "",
+    city: newAddress.city.trim().length < 2 ? "Enter a city" : "",
+    pincode: /^\d{6}$/.test(newAddress.pincode) ? "" : "Enter a valid 6-digit PIN code",
+  };
+  const newAddressValid = !addressErrors.line && !addressErrors.city && !addressErrors.pincode;
+  const venue =
+    addressId === "new"
+      ? {
+          address: `${newAddress.line.trim()}, ${newAddress.city.trim()} ${newAddress.pincode}`.trim(),
+          city: newAddress.city.trim(),
+        }
+      : selectedAddress
+        ? { address: selectedAddress.address, city: cityFromAddress(selectedAddress.address) }
+        : null;
+
+  const total = service ? bookingTotal(service.id) : 0;
+  const walletShort = walletBalance < total;
+
+  const stepValid = [
+    Boolean(service),
+    Boolean(date && slot),
+    addressId === "new" ? newAddressValid : Boolean(selectedAddress),
+    Boolean(payment) && !(payment === "Wallet" && walletShort),
+  ][step];
+
+  const stepHint = [
+    "Choose a ceremony to continue",
+    !date ? "Pick a date to continue" : "Pick a time slot to continue",
+    "Add a venue to continue",
+    "Choose a payment method",
+  ][step];
+
+  const next = () => {
+    if (step === 2 && addressId === "new" && !newAddressValid) {
+      setShowAddressErrors(true);
+      const firstInvalid = addressErrors.line ? "addr-line" : addressErrors.city ? "addr-city" : "addr-pin";
+      document.getElementById(firstInvalid)?.focus();
+      return;
+    }
+    if (!stepValid) return;
+    if (step < steps.length - 1) {
+      setStep(step + 1);
+      return;
+    }
+    // Confirm
+    setProcessing(true);
+    window.setTimeout(() => {
+      if (addressId === "new" && saveAddress) {
+        addAddress({ label: newAddress.label || "Home", address: venue!.address });
+      }
+      const booking = addBooking({
+        purohitId: purohit.id,
+        serviceId,
+        date,
+        timeSlot: slot,
+        address: venue!.address,
+        city: venue!.city,
+        notes: notes.trim(),
+        paymentMethod: payment,
+      });
+      setProcessing(false);
+      setConfirmedId(booking.id);
+      window.scrollTo({ top: 0 });
+    }, 1200);
+  };
+
+  const back = () => (step === 0 ? router.push(`/purohit/${purohit.id}`) : setStep(step - 1));
+
+  // ── Success ──────────────────────────────────────────────
+  if (confirmedId && service && venue) {
+    return (
+      <div className="container-page max-w-xl py-10 sm:py-16">
+        <div className="text-center">
+          <div className="mx-auto flex size-20 animate-scale-in items-center justify-center rounded-full bg-success/15 ring-8 ring-success/5">
+            <CheckCircle2 className="size-10 text-success" />
+          </div>
+          <h1 className="mt-6 text-2xl font-semibold text-foreground sm:text-3xl">Booking request sent</h1>
+          <p className="mx-auto mt-2 max-w-sm text-muted-foreground">
+            {purohit.name} usually confirms within {purohit.responseTime}. We&apos;ll notify you as soon
+            as they do.
+          </p>
         </div>
 
-        {/* Step 1: Service & Time */}
-        {step === 0 && (
-          <div className="space-y-6 animate-fade-in">
-            <div className="bg-cream-100 rounded-2xl shadow-card p-5">
-              <h2 className="font-heading font-semibold text-lg mb-4">
-                Select Service
-              </h2>
-              <div className="grid grid-cols-1 gap-2">
-                {purohitServices.slice(0, 6).map((service) => (
-                  <button
-                    key={service.id}
-                    onClick={() => setSelectedService(service.id)}
-                    className={cn(
-                      "flex items-center justify-between p-4 rounded-xl border-2 transition-all text-left",
-                      selectedService === service.id
-                        ? "border-maroon-800 bg-maroon-50"
-                        : "border-cream-200 hover:border-cream-300"
-                    )}
-                  >
-                    <div>
-                      <div className="font-medium text-sm">{service.name}</div>
-                      <div className="text-xs text-saffron-600">
-                        {service.nameHindi}
-                      </div>
-                      <div className="flex items-center gap-2 mt-1 text-xs text-gray-400">
-                        <Clock className="w-3 h-3" />
-                        {service.duration}
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="font-semibold text-sm flex items-center gap-0.5">
-                        <IndianRupee className="w-3 h-3" />
-                        {service.basePrice.toLocaleString("en-IN")}
-                      </div>
-                      {selectedService === service.id && (
-                        <CheckCircle2 className="w-5 h-5 text-maroon-800 mt-1 ml-auto" />
-                      )}
-                    </div>
-                  </button>
-                ))}
-              </div>
+        <Panel className="mt-8">
+          <div className="flex items-center justify-between gap-3 rounded-xl bg-surface px-4 py-3">
+            <div>
+              <div className="text-xs text-muted-foreground">Booking ID</div>
+              <div className="font-mono text-sm font-semibold text-foreground">{confirmedId}</div>
             </div>
-
-            <div className="bg-cream-100 rounded-2xl shadow-card p-5">
-              <h2 className="font-heading font-semibold text-lg mb-4">
-                Select Date
-              </h2>
-              <div className="flex justify-center">
-                <Calendar
-                  mode="single"
-                  selected={selectedDate}
-                  onSelect={setSelectedDate}
-                  disabled={(date) => date < new Date()}
-                  className="rounded-xl"
-                />
-              </div>
-            </div>
-
-            <div className="bg-cream-100 rounded-2xl shadow-card p-5">
-              <h2 className="font-heading font-semibold text-lg mb-4">
-                Select Time Slot
-              </h2>
-              <div className="grid grid-cols-2 gap-2">
-                {timeSlots.map((slot) => (
-                  <button
-                    key={slot}
-                    onClick={() => setSelectedTime(slot)}
-                    className={cn(
-                      "p-3 rounded-xl border-2 text-sm font-medium transition-all",
-                      selectedTime === slot
-                        ? "border-maroon-800 bg-maroon-50 text-maroon-800"
-                        : "border-cream-200 text-gray-600 hover:border-cream-300"
-                    )}
-                  >
-                    {slot}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Step 2: Address */}
-        {step === 1 && (
-          <div className="space-y-6 animate-fade-in">
-            <div className="bg-cream-100 rounded-2xl shadow-card p-5">
-              <h2 className="font-heading font-semibold text-lg mb-4">
-                Ceremony Address
-              </h2>
-
-              {/* Saved addresses */}
-              <div className="space-y-2 mb-4">
-                {mockUser.addresses.map((addr) => (
-                  <button
-                    key={addr.id}
-                    onClick={() => setAddress(addr.address)}
-                    className={cn(
-                      "w-full flex items-start gap-3 p-3 rounded-xl border-2 text-left transition-all",
-                      address === addr.address
-                        ? "border-maroon-800 bg-maroon-50"
-                        : "border-cream-200 hover:border-cream-300"
-                    )}
-                  >
-                    <MapPin className="w-4 h-4 text-maroon-800 mt-0.5 flex-shrink-0" />
-                    <div>
-                      <div className="font-medium text-sm">{addr.label}</div>
-                      <div className="text-xs text-gray-500">
-                        {addr.address}
-                      </div>
-                    </div>
-                    {addr.isDefault && (
-                      <Badge className="bg-saffron-200 text-saffron-400 border-0 text-[10px] ml-auto">
-                        Default
-                      </Badge>
-                    )}
-                  </button>
-                ))}
-              </div>
-
-              <Separator className="my-4" />
-
-              <Label className="text-sm font-medium">Or enter new address</Label>
-              <Textarea
-                value={address}
-                onChange={(e) => setAddress(e.target.value)}
-                placeholder="Full address with landmarks..."
-                className="mt-2 rounded-xl border-cream-200"
-                rows={3}
-              />
-
-              <div className="mt-4">
-                <Label className="text-sm font-medium">City</Label>
-                <Input
-                  value={city}
-                  onChange={(e) => setCity(e.target.value)}
-                  className="mt-2 rounded-xl border-cream-200"
-                />
-              </div>
-            </div>
-
-            <div className="bg-cream-100 rounded-2xl shadow-card p-5">
-              <h2 className="font-heading font-semibold text-lg mb-4">
-                Special Instructions
-              </h2>
-              <Textarea
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="Any special requests, dietary restrictions, number of guests..."
-                className="rounded-xl border-cream-200"
-                rows={3}
-              />
-
-              <div className="mt-4">
-                <Label className="text-sm font-medium">
-                  Upload Documents (optional)
-                </Label>
-                <div className="mt-2 border-2 border-dashed border-cream-300 rounded-xl p-6 text-center hover:border-maroon-300 transition-colors cursor-pointer">
-                  <Upload className="w-8 h-8 text-gray-300 mx-auto mb-2" />
-                  <p className="text-sm text-gray-500">
-                    Tap to upload kundli, photos, etc.
-                  </p>
-                  <p className="text-xs text-gray-400 mt-1">
-                    PDF, JPG, PNG (max 5MB)
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Step 3: Payment */}
-        {step === 2 && (
-          <div className="space-y-6 animate-fade-in">
-            {/* Order Summary */}
-            <div className="bg-cream-100 rounded-2xl shadow-card p-5">
-              <h2 className="font-heading font-semibold text-lg mb-4">
-                Order Summary
-              </h2>
-              <div className="space-y-3">
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">Purohit</span>
-                  <span className="font-medium">{purohit.name}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">Service</span>
-                  <span className="font-medium">
-                    {selectedServiceData?.name}
-                  </span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">Date</span>
-                  <span className="font-medium">
-                    {selectedDate?.toLocaleDateString("en-IN", {
-                      weekday: "short",
-                      day: "numeric",
-                      month: "short",
-                      year: "numeric",
-                    })}
-                  </span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">Time</span>
-                  <span className="font-medium">{selectedTime}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">Address</span>
-                  <span className="font-medium text-right max-w-[200px] truncate">
-                    {address}
-                  </span>
-                </div>
-                <Separator />
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">Service Fee</span>
-                  <span className="font-medium">
-                    ₹{selectedServiceData?.basePrice.toLocaleString("en-IN")}
-                  </span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">Platform Fee</span>
-                  <span className="font-medium">₹99</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">Samagri (included)</span>
-                  <span className="font-medium text-emerald-600">Free</span>
-                </div>
-                <Separator />
-                <div className="flex justify-between text-base font-bold">
-                  <span>Total</span>
-                  <span className="text-maroon-800">
-                    ₹
-                    {(
-                      (selectedServiceData?.basePrice || 0) + 99
-                    ).toLocaleString("en-IN")}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Payment Method */}
-            <div className="bg-cream-100 rounded-2xl shadow-card p-5">
-              <h2 className="font-heading font-semibold text-lg mb-4">
-                Payment Method
-              </h2>
-              <RadioGroup
-                value={paymentMethod}
-                onValueChange={setPaymentMethod}
-                className="space-y-3"
-              >
-                <label
-                  className={cn(
-                    "flex items-center gap-4 p-4 rounded-xl border-2 cursor-pointer transition-all",
-                    paymentMethod === "upi"
-                      ? "border-maroon-800 bg-maroon-50"
-                      : "border-cream-200"
-                  )}
-                >
-                  <RadioGroupItem value="upi" />
-                  <Smartphone className="w-5 h-5 text-purple-600" />
-                  <div>
-                    <div className="font-medium text-sm">UPI</div>
-                    <div className="text-xs text-gray-400">
-                      Google Pay, PhonePe, Paytm
-                    </div>
-                  </div>
-                </label>
-                <label
-                  className={cn(
-                    "flex items-center gap-4 p-4 rounded-xl border-2 cursor-pointer transition-all",
-                    paymentMethod === "card"
-                      ? "border-maroon-800 bg-maroon-50"
-                      : "border-cream-200"
-                  )}
-                >
-                  <RadioGroupItem value="card" />
-                  <CreditCard className="w-5 h-5 text-blue-600" />
-                  <div>
-                    <div className="font-medium text-sm">
-                      Credit / Debit Card
-                    </div>
-                    <div className="text-xs text-gray-400">
-                      Visa, Mastercard, RuPay
-                    </div>
-                  </div>
-                </label>
-                <label
-                  className={cn(
-                    "flex items-center gap-4 p-4 rounded-xl border-2 cursor-pointer transition-all",
-                    paymentMethod === "wallet"
-                      ? "border-maroon-800 bg-maroon-50"
-                      : "border-cream-200"
-                  )}
-                >
-                  <RadioGroupItem value="wallet" />
-                  <Wallet className="w-5 h-5 text-emerald-600" />
-                  <div>
-                    <div className="font-medium text-sm">Wallet</div>
-                    <div className="text-xs text-gray-400">
-                      Balance: ₹{mockUser.walletBalance.toLocaleString("en-IN")}
-                    </div>
-                  </div>
-                </label>
-              </RadioGroup>
-            </div>
-          </div>
-        )}
-
-        {/* Step 4: Confirmation */}
-        {step === 3 && (
-          <div className="text-center py-8 animate-fade-in">
-            <div className="w-20 h-20 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-6">
-              <PartyPopper className="w-10 h-10 text-emerald-600" />
-            </div>
-            <h2 className="font-heading font-bold text-2xl text-charcoal mb-2">
-              Booking Confirmed! 🎉
-            </h2>
-            <p className="text-gray-500 text-sm mb-6">
-              Your puja has been booked successfully
-            </p>
-
-            <div className="bg-cream-100 rounded-2xl shadow-card p-6 max-w-sm mx-auto text-left">
-              <div className="space-y-3">
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">Booking ID</span>
-                  <span className="font-mono font-semibold text-maroon-800">
-                    {bookingId}
-                  </span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">Status</span>
-                  <Badge className="bg-amber-900/40 text-amber-400 border-0">
-                    Pending
-                  </Badge>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">Purohit</span>
-                  <span className="font-medium">{purohit.name}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">Service</span>
-                  <span className="font-medium">
-                    {selectedServiceData?.name}
-                  </span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">Amount</span>
-                  <span className="font-bold text-maroon-800">
-                    ₹
-                    {(
-                      (selectedServiceData?.basePrice || 0) + 99
-                    ).toLocaleString("en-IN")}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-3 mt-8 max-w-sm mx-auto">
-              <Link href="/bookings">
-                <Button className="w-full bg-maroon-800 hover:bg-maroon-900 text-white rounded-xl h-12">
-                  View My Bookings
-                </Button>
-              </Link>
-              <Link href="/">
-                <Button
-                  variant="outline"
-                  className="w-full rounded-xl h-12 border-cream-300"
-                >
-                  Back to Home
-                </Button>
-              </Link>
-            </div>
-          </div>
-        )}
-
-        {/* Next Button */}
-        {step < 3 && (
-          <div className="mt-6">
             <Button
-              onClick={step === 2 ? handleConfirm : handleNext}
-              disabled={!canProceed()}
-              className="w-full h-14 bg-maroon-800 hover:bg-maroon-900 text-white rounded-2xl font-semibold text-base disabled:opacity-50"
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                navigator.clipboard?.writeText(confirmedId).then(
+                  () => toast.success("Booking ID copied"),
+                  () => undefined
+                );
+              }}
             >
-              {step === 2 ? "Confirm & Pay" : "Continue"}
+              <Copy /> Copy
             </Button>
           </div>
-        )}
+          <dl className="mt-5 space-y-3">
+            <DetailRow label="Ceremony">{service.name}</DetailRow>
+            <DetailRow label="Purohit">{purohit.name}</DetailRow>
+            <DetailRow label="When">
+              {formatDate(date, "weekday")} · {slot}
+            </DetailRow>
+            <DetailRow label="Venue">
+              <span className="line-clamp-2">{venue.address}</span>
+            </DetailRow>
+            <DetailRow label="Payment">{payment}</DetailRow>
+            <div className="border-t border-border pt-3">
+              <DetailRow label={<span className="font-medium text-foreground">Total</span>}>
+                <span className="font-heading text-lg">{formatINR(total)}</span>
+              </DetailRow>
+            </div>
+          </dl>
+        </Panel>
+
+        <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+          <Link href={`/bookings/${confirmedId}`} className={cn(buttonVariants({ size: "lg" }), "sm:flex-1")}>
+            Track booking
+          </Link>
+          <Link href="/" className={cn(buttonVariants({ variant: "outline", size: "lg" }), "sm:flex-1")}>
+            Back to home
+          </Link>
+        </div>
       </div>
+    );
+  }
+
+  // ── Flow ─────────────────────────────────────────────────
+  return (
+    <div className="container-page pt-4 pb-36 sm:pt-6 lg:pb-16">
+      <BackLink href={`/purohit/${purohit.id}`} label={purohit.name} />
+      <div className="mt-4 mb-6 sm:mb-8">
+        <h1 className="text-2xl font-semibold text-foreground sm:text-3xl">Book your ceremony</h1>
+        <div className="mt-5">
+          <Stepper step={step} />
+        </div>
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-[1fr_22rem] lg:items-start">
+        <div className="min-w-0 animate-fade-in" key={step}>
+          <h2 ref={headingRef} tabIndex={-1} className="sr-only">
+            Step {step + 1}: {steps[step]}
+          </h2>
+
+          {step === 0 && (
+            <Panel>
+              <h3 className="text-lg font-semibold text-foreground">Which ceremony are you planning?</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Ceremonies {purohit.name.split(" ")[0]}ji specialises in. Prices include samagri.
+              </p>
+              <div role="radiogroup" aria-label="Ceremony" className="mt-5 space-y-3">
+                {offered.map((s) => (
+                  <OptionCard key={s.id} selected={serviceId === s.id} onSelect={() => setServiceId(s.id)}>
+                    <div className="flex items-start gap-4">
+                      <ServiceIcon name={s.icon} />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="font-medium text-foreground">{s.name}</div>
+                            <div lang="hi" className="text-sm text-gold-300/80">
+                              {s.nameHindi}
+                            </div>
+                          </div>
+                          <div className="font-heading text-lg font-semibold text-foreground">
+                            {formatINR(s.basePrice)}
+                          </div>
+                        </div>
+                        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{s.description}</p>
+                        <div className="mt-2 inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <Clock className="size-3.5" />
+                          {s.duration}
+                        </div>
+                      </div>
+                    </div>
+                  </OptionCard>
+                ))}
+              </div>
+            </Panel>
+          )}
+
+          {step === 1 && (
+            <div className="space-y-6">
+              <Panel>
+                <h3 className="text-lg font-semibold text-foreground">Choose a date</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Consult your family pandit or panchang for the most auspicious muhurat.
+                </p>
+                <div className="-mx-5 mt-5 sm:-mx-6">
+                  <div role="radiogroup" aria-label="Date" className="no-scrollbar flex gap-2 overflow-x-auto px-5 pb-1 sm:px-6">
+                    {!mounted
+                      ? Array.from({ length: 7 }).map((_, i) => (
+                          <Skeleton key={i} className="h-20 w-16 shrink-0 rounded-2xl" />
+                        ))
+                      : days.map((d) => {
+                          const iso = toISODate(d);
+                          const open = timeSlots.some((s) => isSlotAvailable(purohit.id, iso, s.label));
+                          const selected = date === iso;
+                          return (
+                            <button
+                              key={iso}
+                              type="button"
+                              role="radio"
+                              aria-checked={selected}
+                              aria-label={`${format(d, "EEEE, d MMMM")}${open ? "" : ", fully booked"}`}
+                              disabled={!open}
+                              onClick={() => {
+                                setDate(iso);
+                                if (slot && !isSlotAvailable(purohit.id, iso, slot)) setSlot("");
+                              }}
+                              className={cn(
+                                "flex h-20 w-16 shrink-0 flex-col items-center justify-center rounded-2xl border transition-colors disabled:cursor-not-allowed disabled:border-dashed disabled:opacity-40",
+                                selected
+                                  ? "border-primary bg-primary text-primary-foreground"
+                                  : "border-border bg-surface/40 text-foreground hover:border-border-strong"
+                              )}
+                            >
+                              <span className={cn("text-[0.6875rem] font-medium", selected ? "text-primary-foreground/80" : "text-muted-foreground")}>
+                                {dayLabel(d)}
+                              </span>
+                              <span className="font-heading text-xl font-semibold">{format(d, "d")}</span>
+                              <span className={cn("text-[0.6875rem]", selected ? "text-primary-foreground/80" : "text-muted-foreground")}>
+                                {format(d, "MMM")}
+                              </span>
+                            </button>
+                          );
+                        })}
+                  </div>
+                </div>
+              </Panel>
+
+              <Panel>
+                <h3 className="text-lg font-semibold text-foreground">Choose a time</h3>
+                {!date ? (
+                  <p className="mt-4 flex items-center gap-2 rounded-xl border border-dashed border-border-strong p-4 text-sm text-muted-foreground">
+                    <CalendarDays className="size-4" /> Select a date to see available time slots.
+                  </p>
+                ) : (
+                  <div className="mt-5 space-y-5">
+                    {(["Morning", "Afternoon", "Evening"] as DayPeriod[]).map((period) => {
+                      const Icon = periodIcons[period];
+                      const periodSlots = timeSlots.filter((s) => s.period === period);
+                      return (
+                        <div key={period}>
+                          <div className="mb-2.5 flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                            <Icon className="size-4 text-primary" />
+                            {period}
+                          </div>
+                          <div role="radiogroup" aria-label={`${period} slots`} className="grid grid-cols-2 gap-2">
+                            {periodSlots.map((s) => {
+                              const available = isSlotAvailable(purohit.id, date, s.label);
+                              const selected = slot === s.label;
+                              return (
+                                <button
+                                  key={s.label}
+                                  type="button"
+                                  role="radio"
+                                  aria-checked={selected}
+                                  disabled={!available}
+                                  onClick={() => setSlot(s.label)}
+                                  className={cn(
+                                    "flex h-12 items-center justify-center rounded-xl border px-2 text-[0.8125rem] font-medium whitespace-nowrap transition-colors sm:text-sm disabled:cursor-not-allowed disabled:text-subtle-foreground disabled:line-through disabled:opacity-60",
+                                    selected
+                                      ? "border-primary bg-primary/10 text-primary shadow-[0_0_0_1px_var(--primary)]"
+                                      : "border-border bg-surface/40 text-foreground hover:border-border-strong"
+                                  )}
+                                >
+                                  {s.label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </Panel>
+            </div>
+          )}
+
+          {step === 2 && (
+            <div className="space-y-6">
+              <Panel>
+                <h3 className="text-lg font-semibold text-foreground">Where will the ceremony take place?</h3>
+                <div role="radiogroup" aria-label="Venue" className="mt-5 space-y-3">
+                  {addresses.map((a) => (
+                    <OptionCard key={a.id} selected={addressId === a.id} onSelect={() => setAddressId(a.id)}>
+                      <div className="flex items-start gap-3">
+                        <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg bg-surface-strong text-primary">
+                          {a.label === "Home" ? <Home className="size-4" /> : <MapPin className="size-4" />}
+                        </span>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-foreground">{a.label}</span>
+                            {a.isDefault && (
+                              <span className="rounded-md bg-surface-strong px-1.5 py-0.5 text-[0.6875rem] text-muted-foreground">
+                                Default
+                              </span>
+                            )}
+                          </div>
+                          <p className="mt-0.5 text-sm text-muted-foreground">{a.address}</p>
+                        </div>
+                      </div>
+                    </OptionCard>
+                  ))}
+                  <OptionCard selected={addressId === "new"} onSelect={() => setAddressId("new")}>
+                    <div className="flex items-center gap-3">
+                      <span className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-dashed border-border-strong text-muted-foreground">
+                        <Plus className="size-4" />
+                      </span>
+                      <span className="font-medium text-foreground">Use a different address</span>
+                    </div>
+                  </OptionCard>
+                </div>
+
+                {addressId === "new" && (
+                  <div className="mt-5 animate-fade-in space-y-4 rounded-2xl border border-border bg-surface/30 p-4 sm:p-5">
+                    <div>
+                      <Label htmlFor="addr-line">Full address</Label>
+                      <Textarea
+                        id="addr-line"
+                        value={newAddress.line}
+                        onChange={(e) => setNewAddress({ ...newAddress, line: e.target.value })}
+                        placeholder="House / flat no., building, street, landmark"
+                        autoComplete="street-address"
+                        aria-invalid={showAddressErrors && !!addressErrors.line}
+                        aria-describedby="addr-line-error"
+                        className="mt-2 min-h-20"
+                      />
+                      {showAddressErrors && addressErrors.line && (
+                        <p id="addr-line-error" className="mt-1.5 text-xs text-destructive">
+                          {addressErrors.line}
+                        </p>
+                      )}
+                    </div>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div>
+                        <Label htmlFor="addr-city">City</Label>
+                        <Input
+                          id="addr-city"
+                          value={newAddress.city}
+                          onChange={(e) => setNewAddress({ ...newAddress, city: e.target.value })}
+                          autoComplete="address-level2"
+                          aria-invalid={showAddressErrors && !!addressErrors.city}
+                          className="mt-2"
+                        />
+                        {showAddressErrors && addressErrors.city && (
+                          <p className="mt-1.5 text-xs text-destructive">{addressErrors.city}</p>
+                        )}
+                      </div>
+                      <div>
+                        <Label htmlFor="addr-pin">PIN code</Label>
+                        <Input
+                          id="addr-pin"
+                          value={newAddress.pincode}
+                          onChange={(e) =>
+                            setNewAddress({ ...newAddress, pincode: e.target.value.replace(/\D/g, "").slice(0, 6) })
+                          }
+                          inputMode="numeric"
+                          autoComplete="postal-code"
+                          aria-invalid={showAddressErrors && !!addressErrors.pincode}
+                          className="mt-2"
+                        />
+                        {showAddressErrors && addressErrors.pincode && (
+                          <p className="mt-1.5 text-xs text-destructive">{addressErrors.pincode}</p>
+                        )}
+                      </div>
+                    </div>
+                    <label className="flex cursor-pointer items-center gap-3 text-sm text-foreground/90">
+                      <Checkbox checked={saveAddress} onCheckedChange={(v) => setSaveAddress(Boolean(v))} />
+                      Save this address for future bookings
+                    </label>
+                  </div>
+                )}
+              </Panel>
+
+              <Panel>
+                <Label htmlFor="notes" className="text-base font-semibold text-foreground">
+                  Notes for Panditji <span className="font-normal text-muted-foreground">(optional)</span>
+                </Label>
+                <Textarea
+                  id="notes"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value.slice(0, 500))}
+                  placeholder="Number of guests, gotra, family traditions, parking directions…"
+                  className="mt-3"
+                />
+                <p className="mt-1.5 text-right text-xs text-subtle-foreground">{notes.length}/500</p>
+              </Panel>
+            </div>
+          )}
+
+          {step === 3 && service && (
+            <Panel>
+              <h3 className="text-lg font-semibold text-foreground">How would you like to pay?</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                If {purohit.name.split(" ")[0]}ji can&apos;t make it, you&apos;ll get a full refund within 3–5 days.
+              </p>
+              <div role="radiogroup" aria-label="Payment method" className="mt-5 space-y-3">
+                {paymentMethods.map((m) => {
+                  const disabled = m.id === "Wallet" && walletShort;
+                  return (
+                    <OptionCard
+                      key={m.id}
+                      selected={payment === m.id}
+                      disabled={disabled}
+                      onSelect={() => setPayment(m.id)}
+                    >
+                      <div className="flex items-center gap-4">
+                        <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-surface-strong text-primary">
+                          <m.icon className="size-5" />
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <div className="font-medium text-foreground">{m.label}</div>
+                          <div className="text-sm text-muted-foreground">
+                            {m.id === "Wallet"
+                              ? `Balance ${formatINR(walletBalance)}${walletShort ? " · insufficient" : ""}`
+                              : m.hint}
+                          </div>
+                        </div>
+                        <span
+                          aria-hidden
+                          className={cn(
+                            "flex size-5 shrink-0 items-center justify-center rounded-full border-2",
+                            payment === m.id ? "border-primary" : "border-border-strong"
+                          )}
+                        >
+                          {payment === m.id && <span className="size-2.5 rounded-full bg-primary" />}
+                        </span>
+                      </div>
+                    </OptionCard>
+                  );
+                })}
+              </div>
+              <p className="mt-5 flex items-center gap-2 text-xs text-muted-foreground">
+                <ShieldCheck className="size-4 text-success" />
+                Payments are secured with 256-bit encryption.
+              </p>
+            </Panel>
+          )}
+        </div>
+
+        {/* Summary */}
+        <aside className="lg:sticky lg:top-[calc(var(--header-height)+1.5rem)]" aria-label="Booking summary">
+          <Panel className="p-5">
+            <div className="flex items-center gap-3">
+              <PurohitAvatar name={purohit.name} size="md" verified />
+              <div className="min-w-0">
+                <div className="truncate font-medium text-foreground">{purohit.name}</div>
+                <RatingBadge rating={purohit.rating} count={purohit.reviewCount} className="text-xs" />
+              </div>
+            </div>
+            <dl className="mt-5 space-y-3 border-t border-border pt-5">
+              <DetailRow label="Ceremony">{service?.name ?? <span className="text-subtle-foreground">—</span>}</DetailRow>
+              <DetailRow label="Date">
+                {date ? formatDate(date, "weekday") : <span className="text-subtle-foreground">—</span>}
+              </DetailRow>
+              <DetailRow label="Time">{slot || <span className="text-subtle-foreground">—</span>}</DetailRow>
+              <DetailRow label="Venue">
+                {venue?.city ? venue.city : <span className="text-subtle-foreground">—</span>}
+              </DetailRow>
+            </dl>
+            {service && (
+              <dl className="mt-5 space-y-2.5 border-t border-border pt-5">
+                <DetailRow label="Ceremony fee">{formatINR(service.basePrice)}</DetailRow>
+                <DetailRow label="Samagri kit">
+                  <span className="text-success">Included</span>
+                </DetailRow>
+                <DetailRow label="Platform fee">{formatINR(PLATFORM_FEE)}</DetailRow>
+                <div className="flex items-center justify-between border-t border-border pt-3">
+                  <dt className="font-medium text-foreground">Total</dt>
+                  <dd className="font-heading text-xl font-semibold text-foreground">{formatINR(total)}</dd>
+                </div>
+              </dl>
+            )}
+          </Panel>
+        </aside>
+      </div>
+
+      {/* Action bar: fixed on mobile, inline on desktop */}
+      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/90 pb-safe backdrop-blur-xl lg:static lg:mt-6 lg:border-0 lg:bg-transparent lg:pb-0 lg:backdrop-blur-none">
+        <div className="container-page flex items-center gap-3 py-3 lg:grid lg:grid-cols-[1fr_22rem] lg:gap-6 lg:px-0 lg:py-0">
+          <div className="flex min-w-0 flex-1 items-center gap-3">
+            <Button variant="outline" size="lg" onClick={back} disabled={processing} className="px-4">
+              <ArrowLeft />
+              <span className="hidden sm:inline">{step === 0 ? "Cancel" : "Back"}</span>
+            </Button>
+            <div className="min-w-0 flex-1 text-sm lg:hidden">
+              {service ? (
+                <>
+                  <div className="text-xs text-muted-foreground">Total</div>
+                  <div className="font-heading text-lg font-semibold text-foreground">{formatINR(total)}</div>
+                </>
+              ) : (
+                <span className="text-muted-foreground">{stepHint}</span>
+              )}
+            </div>
+            <p className="hidden text-sm text-muted-foreground lg:block" aria-live="polite">
+              {!stepValid && stepHint}
+            </p>
+          </div>
+          <Button
+            size="lg"
+            onClick={next}
+            disabled={(!stepValid && !(step === 2 && addressId === "new")) || processing}
+            className="min-w-36 lg:w-full"
+          >
+            {processing ? (
+              <>
+                <Loader2 className="animate-spin" /> Processing…
+              </>
+            ) : step === steps.length - 1 ? (
+              <>
+                {payment === "Pay later" ? "Request booking" : `Pay ${formatINR(total)}`}
+              </>
+            ) : (
+              <>
+                Continue <ArrowRight />
+              </>
+            )}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function BookingPage() {
+  return (
+    <AppShell bottomNav={false}>
+      <Suspense
+        fallback={
+          <div className="container-page py-10">
+            <Skeleton className="h-8 w-64" />
+            <Skeleton className="mt-6 h-96 rounded-2xl" />
+          </div>
+        }
+      >
+        <BookingFlow />
+      </Suspense>
     </AppShell>
   );
 }

@@ -1,130 +1,113 @@
 "use client";
 
+import Link from "next/link";
+import { CalendarDays, CalendarPlus, ChevronRight, Clock, History, MapPin } from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
 import { useApp } from "@/lib/booking-context";
-import { purohits, services } from "@/lib/mock-data";
-import Link from "next/link";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Badge } from "@/components/ui/badge";
-import {
-  CalendarDays,
-  Clock,
-  MapPin,
-  ChevronRight,
-  IndianRupee,
-} from "lucide-react";
+import { Booking, getPurohit, getService } from "@/lib/mock-data";
+import { isActiveBooking } from "@/lib/booking-status";
+import { formatDate, formatINR } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { buttonVariants } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { PageHeader } from "@/components/shared/page-header";
+import { EmptyState } from "@/components/shared/empty-state";
+import { StatusBadge } from "@/components/shared/status-badge";
+import { ServiceIcon } from "@/components/shared/service-icon";
 
-const statusStyles: Record<string, { bg: string; text: string; label: string }> = {
-  pending: { bg: "bg-amber-100", text: "text-amber-700", label: "Pending" },
-  accepted: { bg: "bg-blue-100", text: "text-blue-700", label: "Accepted" },
-  "on-the-way": { bg: "bg-purple-100", text: "text-purple-700", label: "On the Way" },
-  "in-progress": { bg: "bg-cyan-100", text: "text-cyan-700", label: "In Progress" },
-  completed: { bg: "bg-emerald-100", text: "text-emerald-700", label: "Completed" },
-  cancelled: { bg: "bg-red-100", text: "text-red-700", label: "Cancelled" },
-};
+function BookingCard({ booking }: { booking: Booking }) {
+  const purohit = getPurohit(booking.purohitId);
+  const service = getService(booking.serviceId);
+
+  return (
+    <Link
+      href={`/bookings/${booking.id}`}
+      className="group block rounded-2xl border border-border bg-card p-4 shadow-card transition-[border-color,transform] duration-200 hover:-translate-y-0.5 hover:border-gold-700/60 sm:p-5"
+    >
+      <div className="flex items-start gap-4">
+        <ServiceIcon name={service?.icon} className="hidden sm:flex" />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h3 className="truncate font-semibold text-foreground">{service?.name ?? "Puja"}</h3>
+              <p className="mt-0.5 truncate text-sm text-muted-foreground">with {purohit?.name ?? "your purohit"}</p>
+            </div>
+            <StatusBadge status={booking.status} />
+          </div>
+          <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-sm text-muted-foreground">
+            <span className="inline-flex items-center gap-1.5">
+              <CalendarDays className="size-4 text-subtle-foreground" />
+              {formatDate(booking.date, "weekday")}
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <Clock className="size-4 text-subtle-foreground" />
+              {booking.timeSlot}
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <MapPin className="size-4 text-subtle-foreground" />
+              {booking.city}
+            </span>
+          </div>
+        </div>
+      </div>
+      <div className="mt-4 flex items-center justify-between border-t border-border pt-3 sm:ml-15">
+        <span className="font-heading font-semibold text-foreground">{formatINR(booking.totalAmount)}</span>
+        <span className="inline-flex items-center gap-1 text-sm font-medium text-muted-foreground transition-colors group-hover:text-primary">
+          Details
+          <ChevronRight className="size-4 transition-transform group-hover:translate-x-0.5" />
+        </span>
+      </div>
+    </Link>
+  );
+}
 
 export default function BookingsPage() {
   const { bookings } = useApp();
 
-  const upcoming = bookings.filter(
-    (b) => !["completed", "cancelled"].includes(b.status)
-  );
-  const past = bookings.filter((b) =>
-    ["completed", "cancelled"].includes(b.status)
-  );
-
-  const BookingCard = ({ booking }: { booking: (typeof bookings)[0] }) => {
-    const purohit = purohits.find((p) => p.id === booking.purohitId);
-    const service = services.find((s) => s.id === booking.serviceId);
-    const status = statusStyles[booking.status] || statusStyles.pending;
-
-    return (
-      <Link href={`/bookings/${booking.id}`}>
-        <div className="bg-cream-100 rounded-2xl shadow-card hover:shadow-card-hover transition-all p-5 group">
-          <div className="flex items-start justify-between mb-3">
-            <div>
-              <h3 className="font-heading font-semibold text-base text-charcoal group-hover:text-maroon-800 transition-colors">
-                {service?.name || "Puja Service"}
-              </h3>
-              <p className="text-sm text-gray-500 mt-0.5">
-                {purohit?.name || "Purohit"}
-              </p>
-            </div>
-            <Badge className={cn("border-0", status.bg, status.text)}>
-              {status.label}
-            </Badge>
-          </div>
-
-          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 mb-3">
-            <span className="flex items-center gap-1">
-              <CalendarDays className="w-3 h-3" />
-              {booking.date}
-            </span>
-            <span className="flex items-center gap-1">
-              <Clock className="w-3 h-3" />
-              {booking.timeSlot}
-            </span>
-            <span className="flex items-center gap-1">
-              <MapPin className="w-3 h-3" />
-              {booking.city}
-            </span>
-          </div>
-
-          <div className="flex items-center justify-between pt-3 border-t border-cream-200">
-            <span className="font-semibold text-sm flex items-center gap-0.5">
-              <IndianRupee className="w-3 h-3" />
-              {booking.totalAmount.toLocaleString("en-IN")}
-            </span>
-            <span className="flex items-center gap-1 text-xs text-gray-400 group-hover:text-maroon-800 transition-colors">
-              View Details
-              <ChevronRight className="w-3 h-3" />
-            </span>
-          </div>
-        </div>
-      </Link>
-    );
-  };
+  const upcoming = bookings
+    .filter((b) => isActiveBooking(b.status))
+    .sort((a, b) => a.date.localeCompare(b.date));
+  const past = bookings
+    .filter((b) => !isActiveBooking(b.status))
+    .sort((a, b) => b.date.localeCompare(a.date));
 
   return (
     <AppShell>
-      <div className="max-w-3xl mx-auto px-4 py-6">
-        <h1 className="font-heading font-bold text-2xl text-charcoal mb-6">
-          My Bookings
-        </h1>
+      <div className="container-page max-w-3xl py-6 sm:py-10">
+        <PageHeader
+          title="My bookings"
+          description="Track upcoming ceremonies and revisit past ones."
+          actions={
+            <Link href="/search" className={cn(buttonVariants({ size: "sm" }), "hidden sm:inline-flex")}>
+              <CalendarPlus /> Book a puja
+            </Link>
+          }
+        />
 
         <Tabs defaultValue="upcoming">
-          <TabsList className="w-full bg-cream-100 rounded-xl p-1 h-auto">
-            <TabsTrigger
-              value="upcoming"
-              className="flex-1 rounded-lg py-2.5 data-[state=active]:bg-cream-200 data-[state=active]:shadow-sm"
-            >
-              Upcoming ({upcoming.length})
+          <TabsList className="w-full sm:w-auto">
+            <TabsTrigger value="upcoming" className="sm:px-5">
+              Upcoming
+              <span className="rounded-full bg-background/60 px-1.5 text-xs tabular-nums">{upcoming.length}</span>
             </TabsTrigger>
-            <TabsTrigger
-              value="past"
-              className="flex-1 rounded-lg py-2.5 data-[state=active]:bg-cream-200 data-[state=active]:shadow-sm"
-            >
-              Past ({past.length})
+            <TabsTrigger value="past" className="sm:px-5">
+              Past
+              <span className="rounded-full bg-background/60 px-1.5 text-xs tabular-nums">{past.length}</span>
             </TabsTrigger>
           </TabsList>
 
           <TabsContent value="upcoming" className="mt-4 space-y-3">
             {upcoming.length === 0 ? (
-              <div className="text-center py-16">
-                <p className="text-4xl mb-3">📅</p>
-                <h3 className="font-heading font-semibold text-lg">
-                  No upcoming bookings
-                </h3>
-                <p className="text-sm text-gray-500 mt-1">
-                  Browse purohits and book your next ceremony
-                </p>
-                <Link href="/search">
-                  <button className="mt-4 px-6 py-2 bg-maroon-800 text-white rounded-xl text-sm font-medium">
-                    Find Purohits
-                  </button>
-                </Link>
-              </div>
+              <EmptyState
+                icon={CalendarPlus}
+                title="No upcoming ceremonies"
+                description="When you book a purohit, you'll be able to track every step here."
+                action={
+                  <Link href="/search" className={buttonVariants()}>
+                    Find a purohit
+                  </Link>
+                }
+              />
             ) : (
               upcoming.map((b) => <BookingCard key={b.id} booking={b} />)
             )}
@@ -132,15 +115,11 @@ export default function BookingsPage() {
 
           <TabsContent value="past" className="mt-4 space-y-3">
             {past.length === 0 ? (
-              <div className="text-center py-16">
-                <p className="text-4xl mb-3">🕐</p>
-                <h3 className="font-heading font-semibold text-lg">
-                  No past bookings
-                </h3>
-                <p className="text-sm text-gray-500 mt-1">
-                  Your completed bookings will appear here
-                </p>
-              </div>
+              <EmptyState
+                icon={History}
+                title="No past bookings yet"
+                description="Completed and cancelled ceremonies will appear here."
+              />
             ) : (
               past.map((b) => <BookingCard key={b.id} booking={b} />)
             )}

@@ -1,36 +1,71 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# PurohitConnect
 
-## Getting Started
+Book verified purohits for Vedic ceremonies — Griha Pravesh, Satyanarayan Puja, weddings and more — with transparent pricing, complete samagri and live booking tracking.
 
-First, run the development server:
+The app has three workspaces:
+
+| Workspace | Route | What it does |
+| --- | --- | --- |
+| Families | `/`, `/search`, `/purohit/[id]`, `/book/[id]`, `/bookings`, `/profile` | Discover purohits, book in four steps, track and review ceremonies |
+| Purohits | `/purohit-dashboard` | Accept/decline requests, view schedule and earnings, pause bookings |
+| Admin | `/admin` | Platform KPIs, revenue and city charts, bookings/purohits/users tables |
+
+> Data is mocked in `src/lib/mock-data.ts` and held in React state (`src/lib/booking-context.tsx`), so changes reset on reload. On the sign-in screen, any valid Indian mobile number and any 6-digit code will work.
+
+## Getting started
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+npm run dev      # http://localhost:3000
+npm run build    # production build + type check
+npm run lint
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Set `NEXT_PUBLIC_SITE_URL` in production so Open Graph URLs resolve correctly.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Tech stack
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- **Next.js 14** (App Router) + **React 18** + **TypeScript**
+- **Tailwind CSS v4** with CSS-variable design tokens
+- **Base UI** primitives (dialog, select, menu, tabs, switch, toast, OTP field) wrapped as shadcn-style components in `src/components/ui`
+- **Recharts** for dashboard charts, **date-fns** for dates, **lucide-react** icons
 
-## Learn More
+## Project structure
 
-To learn more about Next.js, take a look at the following resources:
+```
+src/
+  app/                      Routes (each has a small layout.tsx for page metadata)
+  components/
+    ui/                     Primitives: button, input, select, dialog, sheet, toast, confirm-dialog…
+    shared/                 Product components: purohit-card, status-badge, panel, stat-card, chart…
+    layout/                 app-shell, site-header, bottom-nav, site-footer, dashboard-shell
+    home/                   Home page sections
+  lib/
+    mock-data.ts            Purohits, services, bookings + lookup helpers
+    booking-context.tsx     App state: session, profile, wallet, favourites, bookings, reviews
+    booking-status.ts       Single source of truth for booking status labels and colours
+    availability.ts         Deterministic mock slot availability
+    format.ts               INR, dates (timezone-safe), initials
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Design system
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+A single dark theme built around the gold-on-black brand mark. All colours are tokens in `src/app/globals.css`; components use semantic classes, never raw hex values.
 
-## Deploy on Vercel
+| Token (class) | Use |
+| --- | --- |
+| `bg-background`, `bg-card`, `bg-surface`, `bg-surface-strong` | Page → card → inset → raised surfaces |
+| `text-foreground`, `text-muted-foreground`, `text-subtle-foreground` | Primary, secondary and tertiary text (all ≥ 4.5:1 on cards) |
+| `bg-primary`, `text-primary`, `gold-50…950` | Brand gold |
+| `success`, `warning`, `info`, `violet`, `destructive` | Status only — always paired with a label or icon |
+| `chart-1` | Chart marks (a deeper gold validated for the dark surface) |
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Conventions:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- **Buttons on links:** use `<Link className={buttonVariants({ … })}>` rather than nesting a `<button>` inside a link.
+- **Booking status:** render with `<StatusBadge status={…} />`; labels and tones live in `booking-status.ts`.
+- **Destructive actions** (cancel, log out, decline) go through `<ConfirmDialog>`.
+- **Feedback:** call `toast.success/error/info()` from `@/components/ui/toast`.
+- **Dates:** store local `yyyy-MM-dd` via `toISODate()`; never `toISOString()`, which shifts the day for IST users.
+- **Clock-dependent UI** (availability, "today") renders after mount via `useMounted()` to avoid hydration mismatches.
+- **Mobile:** consumer pages get a bottom tab bar from `AppShell`; pages with their own sticky action bar pass `bottomNav={false}`.
