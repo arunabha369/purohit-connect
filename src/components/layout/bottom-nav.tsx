@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { CalendarDays, Home, Search, User } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useApp } from "@/lib/booking-context";
+import { useApp } from "@/lib/store";
 import { isActiveBooking } from "@/lib/booking-status";
 import { isNavActive } from "./site-header";
 
@@ -17,8 +17,10 @@ const tabs = [
 
 export function BottomNav() {
   const pathname = usePathname();
-  const { bookings } = useApp();
-  const activeCount = bookings.filter((b) => isActiveBooking(b.status)).length;
+  const { db, user } = useApp();
+  const activeCount = user
+    ? db.bookings.filter((b) => b.userId === user.id && isActiveBooking(b.status)).length
+    : 0;
 
   return (
     <nav

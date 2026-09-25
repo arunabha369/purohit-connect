@@ -5,10 +5,11 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Search } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useApp } from "@/lib/booking-context";
+import { useApp } from "@/lib/store";
 import { buttonVariants } from "@/components/ui/button";
 import { Logo } from "@/components/shared/logo";
 import { AccountMenu } from "./account-menu";
+import { NotificationBell } from "./notification-bell";
 
 export const primaryNav = [
   { href: "/", label: "Home" },
@@ -22,7 +23,7 @@ export function isNavActive(pathname: string, href: string) {
 
 export function SiteHeader() {
   const pathname = usePathname();
-  const { isLoggedIn } = useApp();
+  const { hydrated, session } = useApp();
   const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
@@ -79,11 +80,16 @@ export function SiteHeader() {
           >
             Book a puja
           </Link>
-          {isLoggedIn ? (
-            <AccountMenu />
+          {!hydrated ? (
+            <span aria-hidden className="h-10 w-[4.5rem] rounded-full bg-surface" />
+          ) : session ? (
+            <>
+              <NotificationBell />
+              <AccountMenu />
+            </>
           ) : (
             <Link
-              href="/login"
+              href={`/login?next=${encodeURIComponent(pathname)}`}
               className={cn(buttonVariants({ variant: "outline", size: "sm" }), "rounded-full px-4")}
             >
               Sign in

@@ -18,14 +18,12 @@ import {
   UserX,
 } from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
-import {
-  getPurohit,
-  getReviewsForPurohit,
-  getServicesForPurohit,
-} from "@/lib/mock-data";
-import { availableSlotCount, upcomingDays } from "@/lib/availability";
+import { getServicesForPurohit } from "@/lib/catalog";
+import { useApp, usePurohit, type PurohitView } from "@/lib/store";
+import { availableSlotCount, upcomingDays } from "@/lib/store/availability";
+import { reviewsFor } from "@/lib/store/selectors";
 import { formatDate, formatINR, formatNumber, toISODate } from "@/lib/format";
-import { useMounted } from "@/lib/use-mounted";
+import { PageLoader } from "@/components/auth/require-role";
 import { cn } from "@/lib/utils";
 import { buttonVariants } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -35,13 +33,13 @@ import { EmptyState } from "@/components/shared/empty-state";
 import { FavoriteButton } from "@/components/shared/favorite-button";
 import { Panel, PanelHeader } from "@/components/shared/panel";
 import { PurohitAvatar } from "@/components/shared/purohit-avatar";
-import { RatingStars } from "@/components/shared/rating";
+import { RatingBadge, RatingStars } from "@/components/shared/rating";
 import { ServiceIcon } from "@/components/shared/service-icon";
 import { ToneBadge } from "@/components/shared/status-badge";
 
-function AvailabilityStrip({ purohitId, enabled }: { purohitId: string; enabled: boolean }) {
-  const mounted = useMounted();
-  if (!mounted) {
+function AvailabilityStrip({ purohit }: { purohit: PurohitView }) {
+  const { db, hydrated } = useApp();
+  if (!hydrated) {
     return (
       <div className="grid grid-cols-7 gap-2">
         {Array.from({ length: 7 }).map((_, i) => (
@@ -50,32 +48,38 @@ function AvailabilityStrip({ purohitId, enabled }: { purohitId: string; enabled:
       </div>
     );
   }
+  const now = new Date();
   const days = upcomingDays(7);
   return (
     <ul className="grid grid-cols-7 gap-1.5 sm:gap-2">
       {days.map((d) => {
         const iso = toISODate(d);
-        const slots = enabled ? availableSlotCount(purohitId, iso) : 0;
+        const blocked = purohit.blockedDates.includes(iso);
+        const slots = availableSlotCount(purohit.id, iso, { bookings: db.bookings, blockedDates: purohit.blockedDates, now });
         const open = slots > 0;
         return (
           <li
             key={iso}
             className={cn(
               "flex flex-col items-center rounded-xl border px-1 py-2.5 text-center",
-              open ? "border-border bg-surface/60" : "border-dashed border-border opacity-50"
+              open ? "border-border bg-surface/60" : "border-dashed border-border bg-transparent text-muted-foreground"
             )}
           >
             <span className="text-[0.6875rem] font-medium text-muted-foreground uppercase">
               {format(d, "EEE")}
             </span>
-            <span className="mt-0.5 font-heading text-lg font-semibold text-foreground">{format(d, "d")}</span>
-            <span className={cn("mt-0.5 text-[0.625rem] font-medium", open ? "text-success" : "text-subtle-foreground")}>
+            <span className={cn("mt-0.5 font-heading text-lg font-semibold", open ? "text-foreground" : "text-muted-foreground")}>
+              {format(d, "d")}
+            </span>
+            <span className={cn("mt-0.5 text-[0.625rem] font-medium", open ? "text-success" : "text-muted-foreground")}>
               {open ? (
                 <>
                   {slots}
                   <span className="hidden sm:inline"> {slots === 1 ? "slot" : "slots"}</span>
                   <span className="sr-only sm:hidden"> {slots === 1 ? "slot" : "slots"} open</span>
                 </>
+              ) : blocked ? (
+                "Off"
               ) : (
                 "Full"
               )}
@@ -89,9 +93,19 @@ function AvailabilityStrip({ purohitId, enabled }: { purohitId: string; enabled:
 
 export default function PurohitProfilePage() {
   const { id } = useParams<{ id: string }>();
-  const purohit = getPurohit(id);
+  const { db, hydrated } = useApp();
+  const purohit = usePurohit(id);
 
-  if (!purohit) {
+  // Purohits approved at runtime only exist in the browser's store.
+  if (!purohit && !hydrated) {
+    return (
+      <AppShell>
+        <PageLoader />
+      </AppShell>
+    );
+  }
+
+  if (!purohit || purohit.suspended) {
     return (
       <AppShell>
         <div className="container-page py-16">
@@ -111,7 +125,7 @@ export default function PurohitProfilePage() {
   }
 
   const offered = getServicesForPurohit(purohit);
-  const purohitReviews = getReviewsForPurohit(purohit.id);
+  const purohitReviews = reviewsFor(db, purohit.id).slice(0, 10);
 
   const share = async () => {
     const url = window.location.href;
@@ -129,8 +143,11 @@ export default function PurohitProfilePage() {
 
   const stats = [
     { label: "Experience", value: `${purohit.experience} yrs` },
-    { label: "Pujas performed", value: `${formatNumber(purohit.completedPujas)}+` },
-    { label: "Rating", value: purohit.rating.toFixed(1) },
+    {
+      label: "Pujas performed",
+      value: purohit.completedPujas ? `${formatNumber(purohit.completedPujas)}+` : "New",
+    },
+    { label: "Rating", value: purohit.isNew ? "New" : purohit.rating.toFixed(1) },
     { label: "Replies in", value: purohit.responseTime },
   ];
 
@@ -182,11 +199,15 @@ export default function PurohitProfilePage() {
                       )}
                     </div>
                     <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
-                      <span className="inline-flex items-center gap-1.5">
-                        <RatingStars value={purohit.rating} size="xs" />
-                        <span className="font-semibold text-foreground">{purohit.rating}</span>
-                        <span>({formatNumber(purohit.reviewCount)} reviews)</span>
-                      </span>
+                      {purohit.isNew ? (
+                        <RatingBadge rating={0} count={0} />
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5">
+                          <RatingStars value={purohit.rating} size="xs" />
+                          <span className="font-semibold text-foreground">{purohit.rating}</span>
+                          <span>({formatNumber(purohit.reviewCount)} reviews)</span>
+                        </span>
+                      )}
                       <span className="inline-flex items-center gap-1">
                         <MapPin className="size-3.5" />
                         {purohit.city}
@@ -286,7 +307,7 @@ export default function PurohitProfilePage() {
                 }
               />
               {purohit.available ? (
-                <AvailabilityStrip purohitId={purohit.id} enabled />
+                <AvailabilityStrip purohit={purohit} />
               ) : (
                 <div className="flex items-center gap-3 rounded-xl border border-dashed border-border-strong p-4 text-sm text-muted-foreground">
                   <CalendarX2 className="size-5 shrink-0" />
@@ -298,21 +319,27 @@ export default function PurohitProfilePage() {
 
             {/* Reviews */}
             <Panel>
-              <div className="mb-6 flex flex-wrap items-center gap-x-6 gap-y-3">
-                <div className="flex items-end gap-2">
-                  <span className="font-heading text-5xl leading-none font-semibold text-foreground">
-                    {purohit.rating.toFixed(1)}
-                  </span>
-                  <span className="pb-1 text-sm text-muted-foreground">/ 5</span>
+              {purohit.isNew ? (
+                <PanelHeader title="Reviews" description="No reviews yet — families can review after their ceremony." />
+              ) : (
+                <div className="mb-6 flex flex-wrap items-center gap-x-6 gap-y-3">
+                  <div className="flex items-end gap-2">
+                    <span className="font-heading text-5xl leading-none font-semibold text-foreground">
+                      {purohit.rating.toFixed(1)}
+                    </span>
+                    <span className="pb-1 text-sm text-muted-foreground">/ 5</span>
+                  </div>
+                  <div>
+                    <RatingStars value={purohit.rating} size="md" />
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Based on {formatNumber(purohit.reviewCount)} verified reviews
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <RatingStars value={purohit.rating} size="md" />
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Based on {formatNumber(purohit.reviewCount)} verified reviews
-                  </p>
-                </div>
-              </div>
-              <h2 className="mb-4 text-base font-semibold text-foreground">Recent reviews</h2>
+              )}
+              {purohitReviews.length > 0 && (
+                <h2 className="mb-4 text-base font-semibold text-foreground">Recent reviews</h2>
+              )}
               {purohitReviews.length ? (
                 <ul className="space-y-3">
                   {purohitReviews.map((review) => (
@@ -325,7 +352,8 @@ export default function PurohitProfilePage() {
                           <div>
                             <div className="text-sm font-medium text-foreground">{review.userName}</div>
                             <div className="text-xs text-muted-foreground">
-                              {review.serviceName} · {formatDate(review.date)}
+                              {review.serviceName}
+                              {review.date && ` · ${formatDate(review.date)}`}
                             </div>
                           </div>
                         </div>
@@ -336,7 +364,7 @@ export default function PurohitProfilePage() {
                   ))}
                 </ul>
               ) : (
-                <EmptyState icon={MessageSquareQuote} title="No reviews yet" className="py-10" />
+                !purohit.isNew && <EmptyState icon={MessageSquareQuote} title="No reviews yet" className="py-10" />
               )}
             </Panel>
           </div>

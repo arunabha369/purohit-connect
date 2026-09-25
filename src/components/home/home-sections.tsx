@@ -10,7 +10,7 @@ import {
   Search,
   Sparkles,
 } from "lucide-react";
-import { getPurohit, reviews } from "@/lib/mock-data";
+import { getCatalogPurohit, sampleReviews } from "@/lib/catalog";
 import { cn } from "@/lib/utils";
 import { buttonVariants } from "@/components/ui/button";
 import { Eyebrow, SectionHeader } from "@/components/shared/section-header";
@@ -187,16 +187,14 @@ export function WhyUs() {
 }
 
 export function Testimonials() {
-  const featured = ["r2", "r6", "r16"]
-    .map((id) => reviews.find((r) => r.id === id))
-    .filter((r): r is (typeof reviews)[number] => Boolean(r));
+  const featured = [1, 5, 15].map((i) => sampleReviews[i]).filter(Boolean);
 
   return (
     <section className="container-page py-14 sm:py-20" aria-labelledby="stories-heading">
       <SectionHeader id="stories-heading" eyebrow="Family stories" title="Ceremonies remembered for a lifetime" />
       <ul className="grid gap-4 md:grid-cols-3">
         {featured.map((r) => (
-          <li key={r.id} className="flex flex-col rounded-2xl border border-border bg-card p-6">
+          <li key={r.userName} className="flex flex-col rounded-2xl border border-border bg-card p-6">
             <Quote aria-hidden className="size-7 text-gold-700" />
             <blockquote className="mt-4 flex-1 text-[0.9375rem] leading-relaxed text-foreground/90">
               {r.comment}
@@ -205,7 +203,7 @@ export function Testimonials() {
               <div>
                 <div className="text-sm font-semibold text-foreground">{r.userName}</div>
                 <div className="text-xs text-muted-foreground">
-                  {r.serviceName} with {getPurohit(r.purohitId)?.name.split(" ").slice(1).join(" ")}
+                  {r.serviceName} with {getCatalogPurohit(r.purohitId)?.name.split(" ").slice(1).join(" ")}
                 </div>
               </div>
               <RatingStars value={r.rating} size="xs" />
@@ -232,7 +230,7 @@ export function JoinCta() {
               bookings, on-time payouts and zero paperwork.
             </p>
           </div>
-          <Link href="/login" className={cn(buttonVariants({ size: "lg" }), "shrink-0")}>
+          <Link href="/join" className={cn(buttonVariants({ size: "lg" }), "shrink-0")}>
             Join as a purohit
             <ArrowRight />
           </Link>

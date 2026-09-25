@@ -4,7 +4,8 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Search, SearchX, SlidersHorizontal, X } from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
-import { categories, cities, getCategory, purohits } from "@/lib/mock-data";
+import { categories, cities, getCategory } from "@/lib/catalog";
+import { usePublicPurohits, type PurohitView } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { formatINR, pluralize } from "@/lib/format";
 import { Button } from "@/components/ui/button";
@@ -44,8 +45,6 @@ const priceOptions = [
   { value: "2500", label: formatINR(2500) },
   { value: "3000", label: formatINR(3000) },
 ];
-
-const allLanguages = Array.from(new Set(purohits.flatMap((p) => p.languages))).sort();
 
 interface Filters {
   city: string;
@@ -107,9 +106,11 @@ function ChipGroup({
 function FilterPanel({
   filters,
   onChange,
+  languages,
 }: {
   filters: Filters;
   onChange: (patch: Partial<Filters>) => void;
+  languages: string[];
 }) {
   return (
     <div className="space-y-6">
@@ -159,7 +160,7 @@ function FilterPanel({
 
       <ChipGroup
         label="Language"
-        options={[{ value: "all", label: "Any" }, ...allLanguages.map((l) => ({ value: l, label: l }))]}
+        options={[{ value: "all", label: "Any" }, ...languages.map((l) => ({ value: l, label: l }))]}
         value={filters.language}
         onChange={(language) => onChange({ language })}
       />
@@ -183,6 +184,8 @@ function SearchContent() {
     availableOnly: params.get("available") === "1",
   });
   const [sheetOpen, setSheetOpen] = useState(false);
+  const purohits = usePublicPurohits();
+  const languages = useMemo(() => Array.from(new Set(purohits.flatMap((p) => p.languages))).sort(), [purohits]);
 
   const updateFilters = (patch: Partial<Filters>) => setFilters((f) => ({ ...f, ...patch }));
 
@@ -212,12 +215,11 @@ function SearchContent() {
       if (filters.rating !== "all" && p.rating < parseFloat(filters.rating)) return false;
       if (filters.language !== "all" && !p.languages.includes(filters.language)) return false;
       if (filters.price !== "all" && p.priceRange.min > parseInt(filters.price, 10)) return false;
-      if (filters.availableOnly && !p.available) return false;
+      if (filters.availableOnly && !p.bookable) return false;
       return true;
     });
 
-    const score = (p: (typeof purohits)[number]) =>
-      (p.available ? 1 : 0) * 10 + p.rating * Math.log10(p.reviewCount + 10);
+    const score = (p: PurohitView) => (p.bookable ? 1 : 0) * 10 + p.rating * Math.log10(p.reviewCount + 10);
     return [...list].sort((a, b) => {
       switch (sort) {
         case "rating":
@@ -232,7 +234,7 @@ function SearchContent() {
           return score(b) - score(a);
       }
     });
-  }, [query, filters, sort]);
+  }, [query, filters, sort, purohits]);
 
   const activeChips: { key: keyof Filters; label: string }[] = [];
   if (filters.city !== "all") activeChips.push({ key: "city", label: filters.city });
@@ -320,7 +322,7 @@ function SearchContent() {
               )}
             </div>
             <div className="overflow-y-auto px-5 py-4">
-              <FilterPanel filters={filters} onChange={updateFilters} />
+              <FilterPanel filters={filters} onChange={updateFilters} languages={languages} />
             </div>
             <div className="border-t border-border p-4">
               <Button size="lg" className="w-full" onClick={() => setSheetOpen(false)}>
@@ -390,7 +392,7 @@ function SearchContent() {
                 </button>
               )}
             </div>
-            <FilterPanel filters={filters} onChange={updateFilters} />
+            <FilterPanel filters={filters} onChange={updateFilters} languages={languages} />
           </div>
         </aside>
 

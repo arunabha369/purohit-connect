@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { CalendarDays, CalendarPlus, ChevronRight, Clock, History, MapPin } from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
-import { useApp } from "@/lib/booking-context";
-import { Booking, getPurohit, getService } from "@/lib/mock-data";
+import { getService } from "@/lib/catalog";
+import { useApp, usePurohit, type Booking } from "@/lib/store";
+import { RequireRole } from "@/components/auth/require-role";
 import { isActiveBooking } from "@/lib/booking-status";
 import { formatDate, formatINR } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -16,7 +17,7 @@ import { StatusBadge } from "@/components/shared/status-badge";
 import { ServiceIcon } from "@/components/shared/service-icon";
 
 function BookingCard({ booking }: { booking: Booking }) {
-  const purohit = getPurohit(booking.purohitId);
+  const purohit = usePurohit(booking.purohitId);
   const service = getService(booking.serviceId);
 
   return (
@@ -51,7 +52,7 @@ function BookingCard({ booking }: { booking: Booking }) {
         </div>
       </div>
       <div className="mt-4 flex items-center justify-between border-t border-border pt-3 sm:ml-15">
-        <span className="font-heading font-semibold text-foreground">{formatINR(booking.totalAmount)}</span>
+        <span className="font-heading font-semibold text-foreground">{formatINR(booking.pricing.total)}</span>
         <span className="inline-flex items-center gap-1 text-sm font-medium text-muted-foreground transition-colors group-hover:text-primary">
           Details
           <ChevronRight className="size-4 transition-transform group-hover:translate-x-0.5" />
@@ -61,8 +62,9 @@ function BookingCard({ booking }: { booking: Booking }) {
   );
 }
 
-export default function BookingsPage() {
-  const { bookings } = useApp();
+function BookingsContent() {
+  const { db, user } = useApp();
+  const bookings = db.bookings.filter((b) => b.userId === user?.id);
 
   const upcoming = bookings
     .filter((b) => isActiveBooking(b.status))
@@ -72,60 +74,68 @@ export default function BookingsPage() {
     .sort((a, b) => b.date.localeCompare(a.date));
 
   return (
+    <div className="container-page max-w-3xl py-6 sm:py-10">
+      <PageHeader
+        title="My bookings"
+        description="Track upcoming ceremonies and revisit past ones."
+        actions={
+          <Link href="/search" className={cn(buttonVariants({ size: "sm" }), "hidden sm:inline-flex")}>
+            <CalendarPlus /> Book a puja
+          </Link>
+        }
+      />
+
+      <Tabs defaultValue="upcoming">
+        <TabsList className="w-full sm:w-auto">
+          <TabsTrigger value="upcoming" className="sm:px-5">
+            Upcoming
+            <span className="rounded-full bg-background/60 px-1.5 text-xs tabular-nums">{upcoming.length}</span>
+          </TabsTrigger>
+          <TabsTrigger value="past" className="sm:px-5">
+            Past
+            <span className="rounded-full bg-background/60 px-1.5 text-xs tabular-nums">{past.length}</span>
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="upcoming" className="mt-4 space-y-3">
+          {upcoming.length === 0 ? (
+            <EmptyState
+              icon={CalendarPlus}
+              title="No upcoming ceremonies"
+              description="When you book a purohit, you'll be able to track every step here."
+              action={
+                <Link href="/search" className={buttonVariants()}>
+                  Find a purohit
+                </Link>
+              }
+            />
+          ) : (
+            upcoming.map((b) => <BookingCard key={b.id} booking={b} />)
+          )}
+        </TabsContent>
+
+        <TabsContent value="past" className="mt-4 space-y-3">
+          {past.length === 0 ? (
+            <EmptyState
+              icon={History}
+              title="No past bookings yet"
+              description="Completed and cancelled ceremonies will appear here."
+            />
+          ) : (
+            past.map((b) => <BookingCard key={b.id} booking={b} />)
+          )}
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
+export default function BookingsPage() {
+  return (
     <AppShell>
-      <div className="container-page max-w-3xl py-6 sm:py-10">
-        <PageHeader
-          title="My bookings"
-          description="Track upcoming ceremonies and revisit past ones."
-          actions={
-            <Link href="/search" className={cn(buttonVariants({ size: "sm" }), "hidden sm:inline-flex")}>
-              <CalendarPlus /> Book a puja
-            </Link>
-          }
-        />
-
-        <Tabs defaultValue="upcoming">
-          <TabsList className="w-full sm:w-auto">
-            <TabsTrigger value="upcoming" className="sm:px-5">
-              Upcoming
-              <span className="rounded-full bg-background/60 px-1.5 text-xs tabular-nums">{upcoming.length}</span>
-            </TabsTrigger>
-            <TabsTrigger value="past" className="sm:px-5">
-              Past
-              <span className="rounded-full bg-background/60 px-1.5 text-xs tabular-nums">{past.length}</span>
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="upcoming" className="mt-4 space-y-3">
-            {upcoming.length === 0 ? (
-              <EmptyState
-                icon={CalendarPlus}
-                title="No upcoming ceremonies"
-                description="When you book a purohit, you'll be able to track every step here."
-                action={
-                  <Link href="/search" className={buttonVariants()}>
-                    Find a purohit
-                  </Link>
-                }
-              />
-            ) : (
-              upcoming.map((b) => <BookingCard key={b.id} booking={b} />)
-            )}
-          </TabsContent>
-
-          <TabsContent value="past" className="mt-4 space-y-3">
-            {past.length === 0 ? (
-              <EmptyState
-                icon={History}
-                title="No past bookings yet"
-                description="Completed and cancelled ceremonies will appear here."
-              />
-            ) : (
-              past.map((b) => <BookingCard key={b.id} booking={b} />)
-            )}
-          </TabsContent>
-        </Tabs>
-      </div>
+      <RequireRole role="user">
+        <BookingsContent />
+      </RequireRole>
     </AppShell>
   );
 }

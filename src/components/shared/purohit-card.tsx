@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Clock, Languages, MapPin } from "lucide-react";
-import type { Purohit } from "@/lib/mock-data";
+import type { PurohitView } from "@/lib/store";
 import { formatINR } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { buttonVariants } from "@/components/ui/button";
@@ -8,7 +8,7 @@ import { PurohitAvatar } from "./purohit-avatar";
 import { RatingBadge } from "./rating";
 import { FavoriteButton } from "./favorite-button";
 
-export function PurohitCard({ purohit, className }: { purohit: Purohit; className?: string }) {
+export function PurohitCard({ purohit, className }: { purohit: PurohitView; className?: string }) {
   const extraSpecs = purohit.specializations.length - 2;
 
   return (
@@ -45,7 +45,7 @@ export function PurohitCard({ purohit, className }: { purohit: Purohit; classNam
         <div className="flex items-center gap-1.5 text-muted-foreground">
           <Clock aria-hidden className="size-3.5 text-subtle-foreground" />
           <dt className="sr-only">Experience</dt>
-          <dd>{purohit.experience} yrs experience</dd>
+          <dd>{purohit.experience} {purohit.experience === 1 ? "yr" : "yrs"} experience</dd>
         </div>
         <div className="flex min-w-0 items-center gap-1.5 text-muted-foreground">
           <Languages aria-hidden className="size-3.5 shrink-0 text-subtle-foreground" />

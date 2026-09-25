@@ -1,6 +1,6 @@
-import type { Booking } from "./mock-data";
+import type { BookingStatus } from "./store/types";
 
-export type BookingStatus = Booking["status"];
+export type { BookingStatus };
 
 export type StatusTone = "warning" | "info" | "violet" | "primary" | "success" | "danger" | "neutral";
 

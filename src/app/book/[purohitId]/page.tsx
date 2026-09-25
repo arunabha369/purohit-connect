@@ -3,12 +3,10 @@
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef, useState } from "react";
-import { format, isToday, isTomorrow } from "date-fns";
 import {
   ArrowLeft,
   ArrowRight,
   Banknote,
-  CalendarDays,
   Check,
   CheckCircle2,
   Clock,
@@ -17,34 +15,29 @@ import {
   Home,
   Loader2,
   MapPin,
-  Moon,
   Plus,
   ShieldCheck,
   Smartphone,
-  Sun,
-  Sunrise,
+  CalendarPlus,
+  Tag,
   UserX,
   Wallet,
+  X,
 } from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
-import { bookingTotal, useApp } from "@/lib/booking-context";
-import {
-  DayPeriod,
-  PLATFORM_FEE,
-  getPurohit,
-  getService,
-  getServicesForPurohit,
-  timeSlots,
-} from "@/lib/mock-data";
-import { isSlotAvailable, upcomingDays } from "@/lib/availability";
-import { formatDate, formatINR, toISODate } from "@/lib/format";
-import { useMounted } from "@/lib/use-mounted";
+import { getService, getServicesForPurohit } from "@/lib/catalog";
+import { useApp, usePurohit, type Booking, type PaymentMethod } from "@/lib/store";
+import { slotState, type AvailabilityContext } from "@/lib/store/availability";
+import { COUPONS, checkCoupon, normalizeCouponCode, priceBooking } from "@/lib/store/pricing";
+import { isFirstBooking } from "@/lib/store/selectors";
+import { buildIcs, downloadFile } from "@/lib/calendar";
+import { formatDate, formatINR } from "@/lib/format";
+import { RequireRole, PageLoader } from "@/components/auth/require-role";
 import { cn } from "@/lib/utils";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "@/components/ui/toast";
 import { BackLink } from "@/components/shared/page-header";
@@ -53,21 +46,22 @@ import { EmptyState } from "@/components/shared/empty-state";
 import { PurohitAvatar } from "@/components/shared/purohit-avatar";
 import { RatingBadge } from "@/components/shared/rating";
 import { ServiceIcon } from "@/components/shared/service-icon";
+import { DateStrip, SlotGrid } from "@/components/booking/slot-picker";
 
 const steps = ["Ceremony", "Date & time", "Venue", "Payment"] as const;
 
-const periodIcons: Record<DayPeriod, React.ComponentType<{ className?: string }>> = {
-  Morning: Sunrise,
-  Afternoon: Sun,
-  Evening: Moon,
-};
 
-const paymentMethods = [
+const paymentMethods: {
+  id: PaymentMethod;
+  label: string;
+  hint: string;
+  icon: React.ComponentType<{ className?: string }>;
+}[] = [
   { id: "UPI", label: "UPI", hint: "Google Pay, PhonePe, Paytm & more", icon: Smartphone },
   { id: "Card", label: "Credit or debit card", hint: "Visa, Mastercard, RuPay", icon: CreditCard },
   { id: "Wallet", label: "PurohitConnect wallet", hint: "", icon: Wallet },
   { id: "Pay later", label: "Pay after the ceremony", hint: "Cash or UPI to the purohit", icon: Banknote },
-] as const;
+];
 
 /** "Flat 302, Sunrise Apts, Sector 62, Noida, UP 201301" → "Noida" */
 function cityFromAddress(address: string) {
@@ -75,11 +69,6 @@ function cityFromAddress(address: string) {
   return parts.length >= 2 ? parts[parts.length - 2] : parts[0];
 }
 
-function dayLabel(d: Date) {
-  if (isToday(d)) return "Today";
-  if (isTomorrow(d)) return "Tomorrow";
-  return format(d, "EEE");
-}
 
 function Stepper({ step }: { step: number }) {
   return (
@@ -173,10 +162,10 @@ function BookingFlow() {
   const { purohitId } = useParams<{ purohitId: string }>();
   const searchParams = useSearchParams();
   const router = useRouter();
-  const mounted = useMounted();
-  const { addBooking, addresses, addAddress, walletBalance } = useApp();
+  const { db, user, walletBalance, api } = useApp();
+  const addresses = user?.addresses ?? [];
 
-  const purohit = getPurohit(purohitId);
+  const purohit = usePurohit(purohitId);
   const offered = purohit ? getServicesForPurohit(purohit) : [];
   const preselected = offered.find((s) => s.id === searchParams.get("service"))?.id;
 
@@ -191,19 +180,21 @@ function BookingFlow() {
   const [saveAddress, setSaveAddress] = useState(true);
   const [showAddressErrors, setShowAddressErrors] = useState(false);
   const [notes, setNotes] = useState("");
-  const [payment, setPayment] = useState<string>("UPI");
+  const [payment, setPayment] = useState<PaymentMethod>("UPI");
+  const [couponInput, setCouponInput] = useState("");
+  const [coupon, setCoupon] = useState<string | undefined>();
+  const [couponError, setCouponError] = useState("");
   const [processing, setProcessing] = useState(false);
-  const [confirmedId, setConfirmedId] = useState<string | null>(null);
+  const [confirmed, setConfirmed] = useState<Booking | null>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
 
   // Move focus to the new step's heading for keyboard and screen-reader users.
   useEffect(() => {
-    if (!mounted) return;
     window.scrollTo({ top: 0, behavior: "smooth" });
     headingRef.current?.focus({ preventScroll: true });
-  }, [step, mounted]);
+  }, [step]);
 
-  if (!purohit || !purohit.available) {
+  if (!purohit || !purohit.bookable) {
     return (
       <div className="container-page py-16">
         <EmptyState
@@ -221,7 +212,9 @@ function BookingFlow() {
   }
 
   const service = getService(serviceId);
-  const days = mounted ? upcomingDays(14) : [];
+  const now = new Date();
+  const availability: AvailabilityContext = { bookings: db.bookings, blockedDates: purohit.blockedDates, now };
+  const isOpen = (d: string, s: string) => slotState(purohit.id, d, s, availability) === "open";
   const selectedAddress = addresses.find((a) => a.id === addressId);
   const addressErrors = {
     line: newAddress.line.trim().length < 10 ? "Enter the full address, including house and street" : "",
@@ -239,8 +232,23 @@ function BookingFlow() {
         ? { address: selectedAddress.address, city: cityFromAddress(selectedAddress.address) }
         : null;
 
-  const total = service ? bookingTotal(service.id) : 0;
+  const firstBooking = user ? isFirstBooking(db, user.id) : false;
+  const pricing = service ? priceBooking({ base: service.basePrice, couponCode: coupon, isFirstBooking: firstBooking }) : null;
+  const total = pricing?.total ?? 0;
   const walletShort = walletBalance < total;
+
+  const applyCoupon = (code = couponInput) => {
+    if (!service) return;
+    const check = checkCoupon(code, { base: service.basePrice, isFirstBooking: firstBooking });
+    if (!check.ok) {
+      setCouponError(check.error);
+      return;
+    }
+    setCoupon(check.coupon.code);
+    setCouponInput(check.coupon.code);
+    setCouponError("");
+    toast.success(`${check.coupon.code} applied`, `You save ${formatINR(check.discount)}.`);
+  };
 
   const stepValid = [
     Boolean(service),
@@ -271,21 +279,28 @@ function BookingFlow() {
     // Confirm
     setProcessing(true);
     window.setTimeout(() => {
-      if (addressId === "new" && saveAddress) {
-        addAddress({ label: newAddress.label || "Home", address: venue!.address });
-      }
-      const booking = addBooking({
+      const res = api.createBooking({
         purohitId: purohit.id,
         serviceId,
         date,
         timeSlot: slot,
         address: venue!.address,
         city: venue!.city,
-        notes: notes.trim(),
+        notes,
         paymentMethod: payment,
+        couponCode: coupon,
+        saveAddressAs: addressId === "new" && saveAddress ? newAddress.label || "Home" : undefined,
       });
       setProcessing(false);
-      setConfirmedId(booking.id);
+      if (!res.ok) {
+        toast.error("Couldn't complete booking", res.error);
+        if (/slot/i.test(res.error)) {
+          setSlot("");
+          setStep(1);
+        }
+        return;
+      }
+      setConfirmed(res.value);
       window.scrollTo({ top: 0 });
     }, 1200);
   };
@@ -293,7 +308,8 @@ function BookingFlow() {
   const back = () => (step === 0 ? router.push(`/purohit/${purohit.id}`) : setStep(step - 1));
 
   // ── Success ──────────────────────────────────────────────
-  if (confirmedId && service && venue) {
+  if (confirmed && service) {
+    const confirmedId = confirmed.id;
     return (
       <div className="container-page max-w-xl py-10 sm:py-16">
         <div className="text-center">
@@ -330,21 +346,44 @@ function BookingFlow() {
             <DetailRow label="Ceremony">{service.name}</DetailRow>
             <DetailRow label="Purohit">{purohit.name}</DetailRow>
             <DetailRow label="When">
-              {formatDate(date, "weekday")} · {slot}
+              {formatDate(confirmed.date, "weekday")} · {confirmed.timeSlot}
             </DetailRow>
             <DetailRow label="Venue">
-              <span className="line-clamp-2">{venue.address}</span>
+              <span className="line-clamp-2">{confirmed.address}</span>
             </DetailRow>
-            <DetailRow label="Payment">{payment}</DetailRow>
+            <DetailRow label="Payment">
+              {confirmed.paymentMethod}
+              {confirmed.paymentStatus === "due" && " · due after ceremony"}
+            </DetailRow>
             <div className="border-t border-border pt-3">
               <DetailRow label={<span className="font-medium text-foreground">Total</span>}>
-                <span className="font-heading text-lg">{formatINR(total)}</span>
+                <span className="font-heading text-lg">{formatINR(confirmed.pricing.total)}</span>
               </DetailRow>
             </div>
           </dl>
         </Panel>
 
-        <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+        <Button
+          variant="secondary"
+          className="mt-4 w-full"
+          onClick={() =>
+            downloadFile(
+              `${confirmedId}.ics`,
+              buildIcs({
+                uid: confirmedId,
+                title: `${service.name} with ${purohit.name}`,
+                description: `Booking ${confirmedId}. Status: awaiting confirmation from the purohit.`,
+                location: confirmed.address,
+                date: confirmed.date,
+                timeSlot: confirmed.timeSlot,
+              }),
+              "text/calendar"
+            )
+          }
+        >
+          <CalendarPlus /> Add to calendar
+        </Button>
+        <div className="mt-3 flex flex-col gap-3 sm:flex-row">
           <Link href={`/bookings/${confirmedId}`} className={cn(buttonVariants({ size: "lg" }), "sm:flex-1")}>
             Track booking
           </Link>
@@ -417,94 +456,22 @@ function BookingFlow() {
                   Consult your family pandit or panchang for the most auspicious muhurat.
                 </p>
                 <div className="-mx-5 mt-5 sm:-mx-6">
-                  <div role="radiogroup" aria-label="Date" className="no-scrollbar flex gap-2 overflow-x-auto px-5 pb-1 sm:px-6">
-                    {!mounted
-                      ? Array.from({ length: 7 }).map((_, i) => (
-                          <Skeleton key={i} className="h-20 w-16 shrink-0 rounded-2xl" />
-                        ))
-                      : days.map((d) => {
-                          const iso = toISODate(d);
-                          const open = timeSlots.some((s) => isSlotAvailable(purohit.id, iso, s.label));
-                          const selected = date === iso;
-                          return (
-                            <button
-                              key={iso}
-                              type="button"
-                              role="radio"
-                              aria-checked={selected}
-                              aria-label={`${format(d, "EEEE, d MMMM")}${open ? "" : ", fully booked"}`}
-                              disabled={!open}
-                              onClick={() => {
-                                setDate(iso);
-                                if (slot && !isSlotAvailable(purohit.id, iso, slot)) setSlot("");
-                              }}
-                              className={cn(
-                                "flex h-20 w-16 shrink-0 flex-col items-center justify-center rounded-2xl border transition-colors disabled:cursor-not-allowed disabled:border-dashed disabled:opacity-40",
-                                selected
-                                  ? "border-primary bg-primary text-primary-foreground"
-                                  : "border-border bg-surface/40 text-foreground hover:border-border-strong"
-                              )}
-                            >
-                              <span className={cn("text-[0.6875rem] font-medium", selected ? "text-primary-foreground/80" : "text-muted-foreground")}>
-                                {dayLabel(d)}
-                              </span>
-                              <span className="font-heading text-xl font-semibold">{format(d, "d")}</span>
-                              <span className={cn("text-[0.6875rem]", selected ? "text-primary-foreground/80" : "text-muted-foreground")}>
-                                {format(d, "MMM")}
-                              </span>
-                            </button>
-                          );
-                        })}
-                  </div>
+                  <DateStrip
+                    purohitId={purohit.id}
+                    value={date}
+                    availability={availability}
+                    className="px-5 sm:px-6"
+                    onChange={(iso) => {
+                      setDate(iso);
+                      if (slot && !isOpen(iso, slot)) setSlot("");
+                    }}
+                  />
                 </div>
               </Panel>
 
               <Panel>
-                <h3 className="text-lg font-semibold text-foreground">Choose a time</h3>
-                {!date ? (
-                  <p className="mt-4 flex items-center gap-2 rounded-xl border border-dashed border-border-strong p-4 text-sm text-muted-foreground">
-                    <CalendarDays className="size-4" /> Select a date to see available time slots.
-                  </p>
-                ) : (
-                  <div className="mt-5 space-y-5">
-                    {(["Morning", "Afternoon", "Evening"] as DayPeriod[]).map((period) => {
-                      const Icon = periodIcons[period];
-                      const periodSlots = timeSlots.filter((s) => s.period === period);
-                      return (
-                        <div key={period}>
-                          <div className="mb-2.5 flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                            <Icon className="size-4 text-primary" />
-                            {period}
-                          </div>
-                          <div role="radiogroup" aria-label={`${period} slots`} className="grid grid-cols-2 gap-2">
-                            {periodSlots.map((s) => {
-                              const available = isSlotAvailable(purohit.id, date, s.label);
-                              const selected = slot === s.label;
-                              return (
-                                <button
-                                  key={s.label}
-                                  type="button"
-                                  role="radio"
-                                  aria-checked={selected}
-                                  disabled={!available}
-                                  onClick={() => setSlot(s.label)}
-                                  className={cn(
-                                    "flex h-12 items-center justify-center rounded-xl border px-2 text-[0.8125rem] font-medium whitespace-nowrap transition-colors sm:text-sm disabled:cursor-not-allowed disabled:text-subtle-foreground disabled:line-through disabled:opacity-60",
-                                    selected
-                                      ? "border-primary bg-primary/10 text-primary shadow-[0_0_0_1px_var(--primary)]"
-                                      : "border-border bg-surface/40 text-foreground hover:border-border-strong"
-                                  )}
-                                >
-                                  {s.label}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
+                <h3 className="mb-5 text-lg font-semibold text-foreground">Choose a time</h3>
+                <SlotGrid purohitId={purohit.id} date={date} value={slot} onChange={setSlot} availability={availability} />
               </Panel>
             </div>
           )}
@@ -667,6 +634,75 @@ function BookingFlow() {
                 <ShieldCheck className="size-4 text-success" />
                 Payments are secured with 256-bit encryption.
               </p>
+
+              <div className="mt-6 border-t border-border pt-5">
+                <Label htmlFor="coupon" className="flex items-center gap-2">
+                  <Tag className="size-4 text-primary" /> Have a coupon?
+                </Label>
+                {coupon ? (
+                  <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-success/30 bg-success/8 px-4 py-3">
+                    <div className="text-sm">
+                      <span className="font-mono font-semibold text-foreground">{coupon}</span>
+                      <span className="text-muted-foreground"> · you save {formatINR(pricing?.discount ?? 0)}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCoupon(undefined);
+                        setCouponInput("");
+                      }}
+                      aria-label="Remove coupon"
+                      className="flex size-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-surface hover:text-foreground"
+                    >
+                      <X className="size-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <div className="mt-3 flex gap-2">
+                      <Input
+                        id="coupon"
+                        value={couponInput}
+                        onChange={(e) => {
+                          setCouponInput(normalizeCouponCode(e.target.value));
+                          setCouponError("");
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            applyCoupon();
+                          }
+                        }}
+                        placeholder="Enter code"
+                        aria-invalid={!!couponError}
+                        aria-describedby="coupon-help"
+                        className="font-mono uppercase"
+                      />
+                      <Button variant="outline" onClick={() => applyCoupon()} disabled={!couponInput.trim()}>
+                        Apply
+                      </Button>
+                    </div>
+                    <p id="coupon-help" className={cn("mt-1.5 text-xs", couponError ? "text-destructive" : "text-muted-foreground")}>
+                      {couponError || "Available offers:"}
+                    </p>
+                    {!couponError && (
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {COUPONS.filter((c) => !c.firstBookingOnly || firstBooking).map((c) => (
+                          <button
+                            key={c.code}
+                            type="button"
+                            onClick={() => applyCoupon(c.code)}
+                            className="rounded-lg border border-dashed border-primary/50 px-3 py-1.5 text-left text-xs transition-colors hover:bg-primary/8"
+                          >
+                            <span className="font-mono font-semibold text-primary">{c.code}</span>
+                            <span className="text-muted-foreground"> · {c.description}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
             </Panel>
           )}
         </div>
@@ -697,7 +733,12 @@ function BookingFlow() {
                 <DetailRow label="Samagri kit">
                   <span className="text-success">Included</span>
                 </DetailRow>
-                <DetailRow label="Platform fee">{formatINR(PLATFORM_FEE)}</DetailRow>
+                <DetailRow label="Platform fee">{formatINR(pricing?.platformFee ?? 0)}</DetailRow>
+                {!!pricing?.discount && (
+                  <DetailRow label={`Coupon ${pricing.coupon}`}>
+                    <span className="text-success">−{formatINR(pricing.discount)}</span>
+                  </DetailRow>
+                )}
                 <div className="flex items-center justify-between border-t border-border pt-3">
                   <dt className="font-medium text-foreground">Total</dt>
                   <dd className="font-heading text-xl font-semibold text-foreground">{formatINR(total)}</dd>
@@ -712,7 +753,14 @@ function BookingFlow() {
       <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/90 pb-safe backdrop-blur-xl lg:static lg:mt-6 lg:border-0 lg:bg-transparent lg:pb-0 lg:backdrop-blur-none">
         <div className="container-page flex items-center gap-3 py-3 lg:grid lg:grid-cols-[1fr_22rem] lg:gap-6 lg:px-0 lg:py-0">
           <div className="flex min-w-0 flex-1 items-center gap-3">
-            <Button variant="outline" size="lg" onClick={back} disabled={processing} className="px-4">
+            <Button
+              variant="outline"
+              size="lg"
+              onClick={back}
+              disabled={processing}
+              aria-label={step === 0 ? "Cancel and go back" : "Back to previous step"}
+              className="px-4"
+            >
               <ArrowLeft />
               <span className="hidden sm:inline">{step === 0 ? "Cancel" : "Back"}</span>
             </Button>
@@ -759,16 +807,11 @@ function BookingFlow() {
 export default function BookingPage() {
   return (
     <AppShell bottomNav={false}>
-      <Suspense
-        fallback={
-          <div className="container-page py-10">
-            <Skeleton className="h-8 w-64" />
-            <Skeleton className="mt-6 h-96 rounded-2xl" />
-          </div>
-        }
-      >
-        <BookingFlow />
-      </Suspense>
+      <RequireRole role="user">
+        <Suspense fallback={<PageLoader />}>
+          <BookingFlow />
+        </Suspense>
+      </RequireRole>
     </AppShell>
   );
 }
