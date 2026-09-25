@@ -6,8 +6,9 @@ export function generateStaticParams() {
   return purohits.map((p) => ({ id: p.id }));
 }
 
-export function generateMetadata({ params }: { params: { id: string } }): Metadata {
-  const purohit = getCatalogPurohit(params.id);
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const { id } = await params;
+  const purohit = getCatalogPurohit(id);
   if (!purohit) return { title: "Purohit profile" };
   const description = `${purohit.name} in ${purohit.city}: ${purohit.experience} years of experience in ${purohit.specializations.join(", ")}. Rated ${purohit.rating}/5 by ${purohit.reviewCount} families.`;
   return {
@@ -18,14 +19,15 @@ export function generateMetadata({ params }: { params: { id: string } }): Metada
   };
 }
 
-export default function PurohitLayout({
+export default async function PurohitLayout({
   children,
   params,
 }: {
   children: React.ReactNode;
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
-  const purohit = getCatalogPurohit(params.id);
+  const { id } = await params;
+  const purohit = getCatalogPurohit(id);
   const jsonLd = purohit && {
     "@context": "https://schema.org",
     "@type": "Service",

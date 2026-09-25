@@ -10,7 +10,7 @@ export function LogoMark({ className }: { className?: string }) {
         className
       )}
     >
-      <Image src="/logo-mark.png" alt="" fill sizes="48px" className="object-cover" priority />
+      <Image src="/logo-mark.png" alt="" fill sizes="48px" className="object-cover" preload />
     </span>
   );
 }

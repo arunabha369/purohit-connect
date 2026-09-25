@@ -78,12 +78,7 @@ function LoginFlow() {
   const profileIncomplete = session?.role === "user" && !!user && !user.name;
 
   // Signed in but never finished onboarding: resume at the profile step.
-  useEffect(() => {
-    if (hydrated && profileIncomplete && step !== "profile") {
-      setRole("user");
-      setStep("profile");
-    }
-  }, [hydrated, profileIncomplete, step]);
+  const currentStep: Step = profileIncomplete ? "profile" : step;
 
   useEffect(() => {
     if (resendIn <= 0) return;
@@ -147,7 +142,7 @@ function LoginFlow() {
   if (!hydrated || finishing) return <PageLoader />;
 
   // Already signed in (and not mid-onboarding): offer to continue or switch.
-  if (session && !profileIncomplete && step === "phone") {
+  if (session && currentStep === "phone") {
     const name = session.role === "user" ? user?.name : session.role === "admin" ? "Admin" : "Purohit account";
     return (
       <div className="animate-fade-in">
@@ -174,7 +169,7 @@ function LoginFlow() {
     );
   }
 
-  if (step === "profile") {
+  if (currentStep === "profile") {
     return (
       <div className="animate-fade-in">
         <h1 className="text-3xl font-semibold text-foreground">Tell us about you</h1>
@@ -232,7 +227,7 @@ function LoginFlow() {
     );
   }
 
-  if (step === "otp") {
+  if (currentStep === "otp") {
     return (
       <div className="animate-fade-in">
         <button
@@ -429,7 +424,7 @@ export default function LoginPage() {
   return (
     <div className="grid min-h-dvh lg:grid-cols-2">
       <aside className="relative hidden overflow-hidden border-r border-border lg:block">
-        <Image src="/hero-bg.png" alt="" fill priority sizes="50vw" className="object-cover opacity-70" />
+        <Image src="/hero-bg.png" alt="" fill preload sizes="50vw" className="object-cover opacity-70" />
         <div className="absolute inset-0 bg-gradient-to-t from-background via-background/40 to-background/20" />
         <div className="relative flex h-full flex-col justify-between p-10">
           <Logo />
