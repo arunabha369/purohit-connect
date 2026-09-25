@@ -81,7 +81,7 @@ export default function LoginPage() {
           src="/hero-bg.png"
           alt=""
           fill
-          priority
+          preload
           sizes="50vw"
           className="object-cover opacity-70"
         />

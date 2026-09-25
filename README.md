@@ -14,6 +14,8 @@ The app has three workspaces:
 
 ## Getting started
 
+Requires Node.js 20.9 or later.
+
 ```bash
 npm install
 npm run dev      # http://localhost:3000
@@ -25,7 +27,7 @@ Set `NEXT_PUBLIC_SITE_URL` in production so Open Graph URLs resolve correctly.
 
 ## Tech stack
 
-- **Next.js 14** (App Router) + **React 18** + **TypeScript**
+- **Next.js 16** (App Router, Turbopack) + **React 19** + **TypeScript**
 - **Tailwind CSS v4** with CSS-variable design tokens
 - **Base UI** primitives (dialog, select, menu, tabs, switch, toast, OTP field) wrapped as shadcn-style components in `src/components/ui`
 - **Recharts** for dashboard charts, **date-fns** for dates, **lucide-react** icons

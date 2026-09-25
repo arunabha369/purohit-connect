@@ -41,7 +41,7 @@ export function ServiceIcon({
   size?: "sm" | "md" | "lg";
   className?: string;
 }) {
-  const Icon = getServiceIcon(name);
+  const Icon = (name && iconMap[name]) || Flame;
   const box = { sm: "size-9 rounded-lg", md: "size-11 rounded-xl", lg: "size-14 rounded-2xl" }[size];
   const icon = { sm: "size-4", md: "size-5", lg: "size-6" }[size];
   return (

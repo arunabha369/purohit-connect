@@ -129,7 +129,7 @@ export function SearchHero() {
               src="/hero-bg.png"
               alt="Brass kalash with coconut and mango leaves beside a puja bell"
               fill
-              priority
+              preload
               sizes="(min-width: 1024px) 28rem, 0px"
               className="object-cover"
             />

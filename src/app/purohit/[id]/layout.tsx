@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import { getPurohit } from "@/lib/mock-data";
 
-export function generateMetadata({ params }: { params: { id: string } }): Metadata {
-  const purohit = getPurohit(params.id);
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const { id } = await params;
+  const purohit = getPurohit(id);
   if (!purohit) return { title: "Purohit not found" };
   return {
     title: `${purohit.name} — ${purohit.city}`,
