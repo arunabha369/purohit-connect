@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRef } from "react";
 import { ArrowLeft, ArrowRight, Clock } from "lucide-react";
-import { services } from "@/lib/mock-data";
+import { services } from "@/lib/catalog";
 import { formatINR } from "@/lib/format";
 import { SectionHeader } from "@/components/shared/section-header";
 import { ServiceIcon } from "@/components/shared/service-icon";

@@ -1,13 +1,13 @@
 import Link from "next/link";
 import { Mail, Phone } from "lucide-react";
-import { categories } from "@/lib/mock-data";
+import { categories } from "@/lib/catalog";
 import { Logo } from "@/components/shared/logo";
 
 const companyLinks = [
   { href: "/search", label: "Find a purohit" },
   { href: "/bookings", label: "Track a booking" },
-  { href: "/login", label: "Join as a purohit" },
-  { href: "/profile", label: "My account" },
+  { href: "/join", label: "Join as a purohit" },
+  { href: "/help", label: "Help & FAQs" },
 ];
 
 export function SiteFooter() {
@@ -79,7 +79,15 @@ export function SiteFooter() {
       <div className="border-t border-border">
         <div className="container-page flex flex-col items-center justify-between gap-2 py-6 text-xs text-subtle-foreground sm:flex-row">
           <p>© {new Date().getFullYear()} PurohitConnect. All rights reserved.</p>
-          <p>Made with devotion in India</p>
+          <nav aria-label="Legal" className="flex items-center gap-4">
+            <Link href="/terms" className="transition-colors hover:text-foreground">
+              Terms
+            </Link>
+            <Link href="/privacy" className="transition-colors hover:text-foreground">
+              Privacy
+            </Link>
+            <span>Made with devotion in India</span>
+          </nav>
         </div>
       </div>
     </footer>

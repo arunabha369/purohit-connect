@@ -6,7 +6,8 @@ import { useCallback, useEffect, useState } from "react";
 import { ArrowLeft, LogOut, Menu } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getInitials } from "@/lib/format";
-import { useApp } from "@/lib/booking-context";
+import { useApp } from "@/lib/store";
+import { NotificationBell } from "./notification-bell";
 import { Logo } from "@/components/shared/logo";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -109,7 +110,7 @@ export function DashboardShell<T extends string>({
   children: React.ReactNode;
 }) {
   const router = useRouter();
-  const { logout } = useApp();
+  const { api } = useApp();
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmLogout, setConfirmLogout] = useState(false);
 
@@ -190,7 +191,10 @@ export function DashboardShell<T extends string>({
             <div className="min-w-0 flex-1">
               <h1 className="truncate text-lg font-semibold text-foreground sm:text-xl">{title}</h1>
             </div>
-            {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
+            <div className="flex shrink-0 items-center gap-2">
+              {actions}
+              <NotificationBell />
+            </div>
           </div>
         </header>
 
@@ -211,9 +215,9 @@ export function DashboardShell<T extends string>({
         tone="destructive"
         icon={<LogOut className="size-5" />}
         onConfirm={() => {
-          logout();
+          api.signOut();
           toast.info("You've been logged out");
-          router.push("/login");
+          router.push("/");
         }}
       />
     </div>

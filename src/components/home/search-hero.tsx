@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { BadgeCheck, CalendarCheck2, MapPin, Search, Star } from "lucide-react";
-import { categories, cities } from "@/lib/mock-data";
+import { categories, cities } from "@/lib/catalog";
 import { Button } from "@/components/ui/button";
 import {
   Select,

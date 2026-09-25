@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
-import { categories } from "@/lib/mock-data";
+import { categories } from "@/lib/catalog";
 import { SectionHeader } from "@/components/shared/section-header";
 import { ServiceIcon } from "@/components/shared/service-icon";
 

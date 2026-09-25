@@ -263,3 +263,12 @@
 ::-webkit-scrollbar-thumb:hover {
   background: #45455a;
 }
+
+/* Print: receipts and other printable pages render on white paper. */
+@media print {
+  html,
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+}

@@ -40,6 +40,18 @@ export function RatingBadge({
   count?: number;
   className?: string;
 }) {
+  if (count === 0) {
+    return (
+      <span
+        className={cn(
+          "inline-flex items-center rounded-full bg-primary/12 px-2 py-0.5 text-xs font-medium text-primary",
+          className
+        )}
+      >
+        New
+      </span>
+    );
+  }
   return (
     <span className={cn("inline-flex items-center gap-1 text-sm", className)}>
       <Star aria-hidden className="size-3.5 fill-primary text-primary" />

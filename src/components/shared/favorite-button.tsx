@@ -1,8 +1,10 @@
 "use client";
 
+import { usePathname, useRouter } from "next/navigation";
 import { Heart } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useApp } from "@/lib/booking-context";
+import { useApp } from "@/lib/store";
+import { loginHref } from "@/lib/navigation";
 import { toast } from "@/components/ui/toast";
 
 export function FavoriteButton({
@@ -16,8 +18,10 @@ export function FavoriteButton({
   className?: string;
   size?: "sm" | "md";
 }) {
-  const { isFavorite, toggleFavorite } = useApp();
-  const active = isFavorite(purohitId);
+  const router = useRouter();
+  const pathname = usePathname();
+  const { user, session, api } = useApp();
+  const active = !!user?.favorites.includes(purohitId);
 
   return (
     <button
@@ -27,10 +31,23 @@ export function FavoriteButton({
       onClick={(e) => {
         e.preventDefault();
         e.stopPropagation();
-        const saved = toggleFavorite(purohitId);
+        if (!user) {
+          if (session) {
+            toast.info("Saving purohits is available on family accounts");
+            return;
+          }
+          toast.info("Sign in to save purohits", "We'll bring you right back here.");
+          router.push(loginHref("user", pathname));
+          return;
+        }
+        const res = api.toggleFavorite(purohitId);
+        if (!res.ok) {
+          toast.error(res.error);
+          return;
+        }
         toast.success(
-          saved ? "Saved to favourites" : "Removed from favourites",
-          saved ? `${purohitName} is now in your saved list.` : undefined
+          res.value ? "Saved to favourites" : "Removed from favourites",
+          res.value ? `${purohitName} is now in your saved list.` : undefined
         );
       }}
       className={cn(

@@ -1,13 +1,15 @@
+"use client";
+
 import Link from "next/link";
-import { purohits } from "@/lib/mock-data";
+import { usePublicPurohits } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { buttonVariants } from "@/components/ui/button";
 import { SectionHeader } from "@/components/shared/section-header";
 import { PurohitCard } from "@/components/shared/purohit-card";
 
 export function PurohitCards() {
-  const topPurohits = purohits
-    .filter((p) => p.available)
+  const topPurohits = usePublicPurohits()
+    .filter((p) => p.bookable && !p.isNew)
     .sort((a, b) => b.rating - a.rating || b.reviewCount - a.reviewCount)
     .slice(0, 6);
 
