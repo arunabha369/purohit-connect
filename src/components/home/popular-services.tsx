@@ -1,77 +1,85 @@
 "use client";
 
 import Link from "next/link";
+import { useRef } from "react";
+import { ArrowLeft, ArrowRight, Clock } from "lucide-react";
 import { services } from "@/lib/mock-data";
-import { Clock, IndianRupee } from "lucide-react";
+import { formatINR } from "@/lib/format";
+import { SectionHeader } from "@/components/shared/section-header";
+import { ServiceIcon } from "@/components/shared/service-icon";
+import { Button } from "@/components/ui/button";
 
 export function PopularServices() {
   const popular = services.filter((s) => s.popular);
+  const scroller = useRef<HTMLUListElement>(null);
+
+  const scrollBy = (dir: 1 | -1) => {
+    const el = scroller.current;
+    if (!el) return;
+    el.scrollBy({ left: dir * el.clientWidth * 0.8, behavior: "smooth" });
+  };
 
   return (
-    <section className="px-4 py-12 max-w-6xl mx-auto">
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <div className="flex items-center gap-3 mb-2">
-            <div className="w-6 h-[2px] bg-maroon-800" />
-            <span className="text-[10px] font-bold tracking-[0.2em] uppercase text-maroon-800">
-              Popular
-            </span>
+    <section className="py-14 sm:py-20" aria-labelledby="services-heading">
+      <div className="container-page">
+        <div className="flex items-end justify-between gap-4">
+          <SectionHeader
+            id="services-heading"
+            eyebrow="Most booked"
+            title="Popular pujas"
+            description="Fixed, transparent pricing. Samagri and dakshina guidance included."
+            className="mb-0"
+          />
+          <div className="hidden shrink-0 gap-2 md:flex">
+            <Button variant="outline" size="icon" aria-label="Scroll left" onClick={() => scrollBy(-1)} className="rounded-full">
+              <ArrowLeft />
+            </Button>
+            <Button variant="outline" size="icon" aria-label="Scroll right" onClick={() => scrollBy(1)} className="rounded-full">
+              <ArrowRight />
+            </Button>
           </div>
-          <h2 className="font-heading font-black text-2xl md:text-3xl text-white">
-            Popular Services
-          </h2>
         </div>
-        <Link
-          href="/search"
-          className="text-sm font-medium text-maroon-800 hover:text-maroon-700"
-        >
-          See All →
-        </Link>
       </div>
 
-      <div className="flex gap-4 overflow-x-auto no-scrollbar pb-2">
+      <ul
+        ref={scroller}
+        className="no-scrollbar mt-8 flex snap-x snap-mandatory scroll-px-4 gap-4 overflow-x-auto px-4 pb-2 sm:scroll-px-6 sm:px-6 xl:scroll-px-[calc((100vw-72rem)/2+1.5rem)] xl:px-[calc((100vw-72rem)/2+1.5rem)]"
+      >
         {popular.map((service) => (
-          <Link
-            key={service.id}
-            href={`/search?service=${service.id}`}
-            className="min-w-[280px] md:min-w-[320px] rounded-2xl bg-cream-100/50 border border-white/[0.06] hover:border-maroon-800/30 transition-all duration-300 overflow-hidden group"
-          >
-            {/* Top accent strip */}
-            <div className="h-1 bg-gradient-to-r from-maroon-800 to-maroon-600" />
-            <div className="p-5">
-              <div className="flex items-start justify-between mb-3">
-                <div>
-                  <h3 className="font-heading font-semibold text-base text-white group-hover:text-maroon-800 transition-colors">
-                    {service.name}
-                  </h3>
-                  <p className="text-xs text-maroon-800/70 font-medium mt-0.5">
-                    {service.nameHindi}
-                  </p>
-                </div>
-                <span className="px-2.5 py-1 rounded-full bg-maroon-800/15 border border-maroon-800/20 text-maroon-800 text-[10px] font-bold">
-                  Popular
+          <li key={service.id} className="w-[17.5rem] shrink-0 snap-start sm:w-80">
+            <Link
+              href={`/search?category=${service.category}`}
+              className="group flex h-full flex-col rounded-2xl border border-border bg-card p-5 transition-[border-color,transform] duration-300 hover:-translate-y-0.5 hover:border-gold-700/60"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <ServiceIcon name={service.icon} size="lg" />
+                <span className="inline-flex items-center gap-1 rounded-full bg-surface px-2.5 py-1 text-xs text-muted-foreground">
+                  <Clock className="size-3" />
+                  {service.duration}
                 </span>
               </div>
-              <p className="text-xs text-white/35 line-clamp-2 mb-4">
+              <h3 className="mt-5 text-lg font-semibold text-foreground">{service.name}</h3>
+              <p lang="hi" className="text-sm text-gold-300/80">
+                {service.nameHindi}
+              </p>
+              <p className="mt-3 line-clamp-2 text-sm leading-relaxed text-muted-foreground">
                 {service.description}
               </p>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1 text-sm font-bold text-maroon-800">
-                  <IndianRupee className="w-3.5 h-3.5" />
-                  {service.basePrice.toLocaleString("en-IN")}
-                  <span className="text-xs font-normal text-white/30 ml-1">
-                    onwards
+              <div className="mt-auto flex items-center justify-between pt-5">
+                <div>
+                  <span className="text-xs text-muted-foreground">From </span>
+                  <span className="font-heading text-lg font-semibold text-foreground">
+                    {formatINR(service.basePrice)}
                   </span>
                 </div>
-                <div className="flex items-center gap-1 text-xs text-white/30">
-                  <Clock className="w-3 h-3" />
-                  {service.duration}
-                </div>
+                <span className="flex size-9 items-center justify-center rounded-full border border-border-strong text-muted-foreground transition-colors group-hover:border-primary group-hover:bg-primary group-hover:text-primary-foreground">
+                  <ArrowRight className="size-4" />
+                </span>
               </div>
-            </div>
-          </Link>
+            </Link>
+          </li>
         ))}
-      </div>
+      </ul>
     </section>
   );
 }

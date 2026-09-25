@@ -1,18 +1,15 @@
 "use client";
 
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Search, SearchX, SlidersHorizontal, X } from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
-import { purohits, cities } from "@/lib/mock-data";
-import { useState, useMemo } from "react";
-import Link from "next/link";
-import { Input } from "@/components/ui/input";
+import { categories, cities, getCategory, purohits } from "@/lib/mock-data";
+import { cn } from "@/lib/utils";
+import { formatINR, pluralize } from "@/lib/format";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import {
-  Sheet,
-  SheetContent,
-  SheetTrigger,
-  SheetTitle,
-} from "@/components/ui/sheet";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -20,99 +17,112 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Label } from "@/components/ui/label";
-import {
-  Search,
-  SlidersHorizontal,
-  Star,
-  MapPin,
+import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { Skeleton } from "@/components/ui/skeleton";
+import { PurohitCard } from "@/components/shared/purohit-card";
+import { EmptyState } from "@/components/shared/empty-state";
 
-  IndianRupee,
-  X,
-} from "lucide-react";
-import { cn } from "@/lib/utils";
+const sortOptions = {
+  recommended: "Recommended",
+  rating: "Highest rated",
+  "price-asc": "Price: low to high",
+  "price-desc": "Price: high to low",
+  experience: "Most experienced",
+} as const;
+type SortKey = keyof typeof sortOptions;
 
-const avatarColors = [
-  "from-maroon-700 to-maroon-900",
-  "from-saffron-400 to-saffron-600",
-  "from-gold-400 to-gold-600",
-  "from-emerald-500 to-emerald-700",
-  "from-blue-500 to-blue-700",
-  "from-purple-500 to-purple-700",
-  "from-rose-500 to-rose-700",
-  "from-cyan-500 to-cyan-700",
+const ratingOptions = [
+  { value: "all", label: "Any" },
+  { value: "4.5", label: "4.5+" },
+  { value: "4.7", label: "4.7+" },
+  { value: "4.8", label: "4.8+" },
 ];
 
-function getInitials(name: string) {
-  return name
-    .split(" ")
-    .map((w) => w[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
+const priceOptions = [
+  { value: "all", label: "Any" },
+  { value: "2000", label: formatINR(2000) },
+  { value: "2500", label: formatINR(2500) },
+  { value: "3000", label: formatINR(3000) },
+];
+
+const allLanguages = Array.from(new Set(purohits.flatMap((p) => p.languages))).sort();
+
+interface Filters {
+  city: string;
+  category: string;
+  rating: string;
+  language: string;
+  price: string;
+  availableOnly: boolean;
 }
 
-export default function SearchPage() {
-  const [query, setQuery] = useState("");
-  const [selectedCity, setSelectedCity] = useState("all");
-  const [selectedRating, setSelectedRating] = useState("all");
-  const [selectedLanguage, setSelectedLanguage] = useState("all");
-  const [priceMax, setPriceMax] = useState("all");
-  const [filterOpen, setFilterOpen] = useState(false);
+const defaultFilters: Filters = {
+  city: "all",
+  category: "all",
+  rating: "all",
+  language: "all",
+  price: "all",
+  availableOnly: false,
+};
 
-  const allLanguages = useMemo(() => {
-    const langs = new Set<string>();
-    purohits.forEach((p) => p.languages.forEach((l) => langs.add(l)));
-    return Array.from(langs).sort();
-  }, []);
+function ChipGroup({
+  label,
+  options,
+  value,
+  onChange,
+}: {
+  label: string;
+  options: { value: string; label: string }[];
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <fieldset>
+      <legend className="mb-2.5 text-[0.8125rem] font-medium text-foreground/90">{label}</legend>
+      <div className="flex flex-wrap gap-2">
+        {options.map((o) => {
+          const active = value === o.value;
+          return (
+            <button
+              key={o.value}
+              type="button"
+              aria-pressed={active}
+              onClick={() => onChange(o.value)}
+              className={cn(
+                "h-9 rounded-full border px-3 text-sm transition-colors",
+                active
+                  ? "border-primary bg-primary/12 font-medium text-primary"
+                  : "border-border-strong text-muted-foreground hover:border-muted-foreground/50 hover:text-foreground"
+              )}
+            >
+              {o.label}
+            </button>
+          );
+        })}
+      </div>
+    </fieldset>
+  );
+}
 
-  const filtered = useMemo(() => {
-    return purohits.filter((p) => {
-      if (query) {
-        const q = query.toLowerCase();
-        const matches =
-          p.name.toLowerCase().includes(q) ||
-          p.city.toLowerCase().includes(q) ||
-          p.specializations.some((s) => s.toLowerCase().includes(q));
-        if (!matches) return false;
-      }
-      if (selectedCity !== "all" && p.city !== selectedCity) return false;
-      if (selectedRating !== "all" && p.rating < parseFloat(selectedRating))
-        return false;
-      if (
-        selectedLanguage !== "all" &&
-        !p.languages.includes(selectedLanguage)
-      )
-        return false;
-      if (priceMax !== "all" && p.priceRange.min > parseInt(priceMax))
-        return false;
-      return true;
-    });
-  }, [query, selectedCity, selectedRating, selectedLanguage, priceMax]);
-
-  const hasFilters =
-    selectedCity !== "all" ||
-    selectedRating !== "all" ||
-    selectedLanguage !== "all" ||
-    priceMax !== "all";
-
-  const clearFilters = () => {
-    setSelectedCity("all");
-    setSelectedRating("all");
-    setSelectedLanguage("all");
-    setPriceMax("all");
-  };
-
-  const FilterContent = () => (
+function FilterPanel({
+  filters,
+  onChange,
+}: {
+  filters: Filters;
+  onChange: (patch: Partial<Filters>) => void;
+}) {
+  return (
     <div className="space-y-6">
       <div>
-        <Label className="text-sm font-medium mb-2 block">City</Label>
-        <Select value={selectedCity} onValueChange={(val) => setSelectedCity(val || "all")}>
-          <SelectTrigger>
-            <SelectValue placeholder="All Cities" />
+        <Label htmlFor="filter-city" className="mb-2.5">
+          City
+        </Label>
+        <Select value={filters.city} onValueChange={(v) => onChange({ city: v ?? "all" })}>
+          <SelectTrigger id="filter-city" className="w-full">
+            <SelectValue>{(v: string) => (v === "all" ? "All cities" : v)}</SelectValue>
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All Cities</SelectItem>
+            <SelectItem value="all">All cities</SelectItem>
             {cities.map((c) => (
               <SelectItem key={c} value={c}>
                 {c}
@@ -121,250 +131,336 @@ export default function SearchPage() {
           </SelectContent>
         </Select>
       </div>
-      <div>
-        <Label className="text-sm font-medium mb-2 block">Minimum Rating</Label>
-        <Select value={selectedRating} onValueChange={(val) => setSelectedRating(val || "0")}>
-          <SelectTrigger>
-            <SelectValue placeholder="Any Rating" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Any Rating</SelectItem>
-            <SelectItem value="4.5">4.5+ ⭐</SelectItem>
-            <SelectItem value="4.0">4.0+ ⭐</SelectItem>
-            <SelectItem value="3.5">3.5+ ⭐</SelectItem>
-          </SelectContent>
-        </Select>
+
+      <label className="flex cursor-pointer items-center justify-between gap-4 rounded-xl border border-border bg-surface/50 p-3.5">
+        <span>
+          <span className="block text-sm font-medium text-foreground">Available now</span>
+          <span className="block text-xs text-muted-foreground">Accepting new bookings</span>
+        </span>
+        <Switch
+          checked={filters.availableOnly}
+          onCheckedChange={(checked) => onChange({ availableOnly: checked })}
+        />
+      </label>
+
+      <ChipGroup
+        label="Minimum rating"
+        options={ratingOptions}
+        value={filters.rating}
+        onChange={(rating) => onChange({ rating })}
+      />
+
+      <ChipGroup
+        label="Max starting price"
+        options={priceOptions}
+        value={filters.price}
+        onChange={(price) => onChange({ price })}
+      />
+
+      <ChipGroup
+        label="Language"
+        options={[{ value: "all", label: "Any" }, ...allLanguages.map((l) => ({ value: l, label: l }))]}
+        value={filters.language}
+        onChange={(language) => onChange({ language })}
+      />
+    </div>
+  );
+}
+
+function SearchContent() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const params = useSearchParams();
+
+  const [query, setQuery] = useState(params.get("q") ?? "");
+  const [sort, setSort] = useState<SortKey>(
+    (params.get("sort") as SortKey) in sortOptions ? (params.get("sort") as SortKey) : "recommended"
+  );
+  const [filters, setFilters] = useState<Filters>({
+    ...defaultFilters,
+    city: params.get("city") ?? "all",
+    category: getCategory(params.get("category") ?? undefined) ? params.get("category")! : "all",
+    availableOnly: params.get("available") === "1",
+  });
+  const [sheetOpen, setSheetOpen] = useState(false);
+
+  const updateFilters = (patch: Partial<Filters>) => setFilters((f) => ({ ...f, ...patch }));
+
+  // Keep the URL shareable without adding history entries on every keystroke.
+  useEffect(() => {
+    const next = new URLSearchParams();
+    if (query.trim()) next.set("q", query.trim());
+    if (filters.city !== "all") next.set("city", filters.city);
+    if (filters.category !== "all") next.set("category", filters.category);
+    if (filters.availableOnly) next.set("available", "1");
+    if (sort !== "recommended") next.set("sort", sort);
+    const qs = next.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  }, [query, filters.city, filters.category, filters.availableOnly, sort, pathname, router]);
+
+  const results = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const category = getCategory(filters.category);
+    const list = purohits.filter((p) => {
+      if (
+        q &&
+        ![p.name, p.city, ...p.specializations, ...p.languages].some((f) => f.toLowerCase().includes(q))
+      )
+        return false;
+      if (filters.city !== "all" && p.city !== filters.city) return false;
+      if (category && !p.specializations.includes(category.specialization)) return false;
+      if (filters.rating !== "all" && p.rating < parseFloat(filters.rating)) return false;
+      if (filters.language !== "all" && !p.languages.includes(filters.language)) return false;
+      if (filters.price !== "all" && p.priceRange.min > parseInt(filters.price, 10)) return false;
+      if (filters.availableOnly && !p.available) return false;
+      return true;
+    });
+
+    const score = (p: (typeof purohits)[number]) =>
+      (p.available ? 1 : 0) * 10 + p.rating * Math.log10(p.reviewCount + 10);
+    return [...list].sort((a, b) => {
+      switch (sort) {
+        case "rating":
+          return b.rating - a.rating || b.reviewCount - a.reviewCount;
+        case "price-asc":
+          return a.priceRange.min - b.priceRange.min;
+        case "price-desc":
+          return b.priceRange.min - a.priceRange.min;
+        case "experience":
+          return b.experience - a.experience;
+        default:
+          return score(b) - score(a);
+      }
+    });
+  }, [query, filters, sort]);
+
+  const activeChips: { key: keyof Filters; label: string }[] = [];
+  if (filters.city !== "all") activeChips.push({ key: "city", label: filters.city });
+  if (filters.rating !== "all") activeChips.push({ key: "rating", label: `${filters.rating}+ rating` });
+  if (filters.price !== "all")
+    activeChips.push({ key: "price", label: `Up to ${formatINR(parseInt(filters.price, 10))}` });
+  if (filters.language !== "all") activeChips.push({ key: "language", label: filters.language });
+  if (filters.availableOnly) activeChips.push({ key: "availableOnly", label: "Available now" });
+
+  const sidebarFilterCount = activeChips.length;
+  const hasAnyFilter = sidebarFilterCount > 0 || filters.category !== "all" || query.trim() !== "";
+
+  const clearAll = () => {
+    setFilters(defaultFilters);
+    setQuery("");
+  };
+
+  const activeCategory = getCategory(filters.category);
+
+  return (
+    <div className="container-page py-6 sm:py-10">
+      <div className="mb-6">
+        <h1 className="text-2xl font-semibold text-foreground sm:text-3xl">
+          {activeCategory ? `${activeCategory.name} purohits` : "Find a purohit"}
+        </h1>
+        <p className="mt-1.5 text-sm text-muted-foreground sm:text-base">
+          Verified purohits with transparent pricing and samagri included.
+        </p>
       </div>
-      <div>
-        <Label className="text-sm font-medium mb-2 block">Language</Label>
-        <Select value={selectedLanguage} onValueChange={(val) => setSelectedLanguage(val || "all")}>
-          <SelectTrigger>
-            <SelectValue placeholder="Any Language" />
+
+      {/* Search + controls */}
+      <div className="flex gap-2">
+        <label className="relative flex-1">
+          <span className="sr-only">Search purohits</span>
+          <Search aria-hidden className="pointer-events-none absolute top-1/2 left-3.5 size-[1.125rem] -translate-y-1/2 text-muted-foreground" />
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search name, city or puja"
+            className="h-12 w-full rounded-xl border border-input bg-surface pr-10 pl-11 text-base text-foreground outline-none transition-[border-color,box-shadow] placeholder:text-subtle-foreground hover:border-border-strong focus-visible:border-primary/70 focus-visible:ring-3 focus-visible:ring-primary/15 md:text-sm [&::-webkit-search-cancel-button]:hidden"
+          />
+          {query && (
+            <button
+              type="button"
+              onClick={() => setQuery("")}
+              aria-label="Clear search"
+              className="absolute top-1/2 right-2 flex size-8 -translate-y-1/2 items-center justify-center rounded-lg text-muted-foreground hover:bg-surface-strong hover:text-foreground"
+            >
+              <X className="size-4" />
+            </button>
+          )}
+        </label>
+
+        <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+          <SheetTrigger
+            aria-label={`Filters${sidebarFilterCount ? `, ${sidebarFilterCount} applied` : ""}`}
+            className={cn(
+              "relative flex h-12 shrink-0 items-center gap-2 rounded-xl border px-4 text-sm font-medium transition-colors lg:hidden",
+              sidebarFilterCount
+                ? "border-primary/60 bg-primary/10 text-primary"
+                : "border-input bg-surface text-foreground hover:border-border-strong"
+            )}
+          >
+            <SlidersHorizontal className="size-4" />
+            <span className="hidden sm:inline">Filters</span>
+            {sidebarFilterCount > 0 && (
+              <span className="flex size-5 items-center justify-center rounded-full bg-primary text-[0.6875rem] font-bold text-primary-foreground">
+                {sidebarFilterCount}
+              </span>
+            )}
+          </SheetTrigger>
+          <SheetContent side="bottom" className="gap-0 p-0">
+            <div className="mx-auto mt-3 h-1 w-10 rounded-full bg-border-strong" aria-hidden />
+            <div className="flex items-center justify-between px-5 pt-4 pb-2">
+              <SheetTitle>Filters</SheetTitle>
+              {sidebarFilterCount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setFilters((f) => ({ ...defaultFilters, category: f.category }))}
+                  className="mr-10 text-sm font-medium text-primary"
+                >
+                  Reset
+                </button>
+              )}
+            </div>
+            <div className="overflow-y-auto px-5 py-4">
+              <FilterPanel filters={filters} onChange={updateFilters} />
+            </div>
+            <div className="border-t border-border p-4">
+              <Button size="lg" className="w-full" onClick={() => setSheetOpen(false)}>
+                Show {pluralize(results.length, "purohit")}
+              </Button>
+            </div>
+          </SheetContent>
+        </Sheet>
+
+        <Select value={sort} onValueChange={(v) => v && setSort(v as SortKey)}>
+          <SelectTrigger aria-label="Sort results" className="hidden h-12 w-52 sm:flex">
+            <span className="text-muted-foreground">Sort:</span>
+            <SelectValue>{(v: SortKey) => sortOptions[v]}</SelectValue>
           </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Any Language</SelectItem>
-            {allLanguages.map((l) => (
-              <SelectItem key={l} value={l}>
-                {l}
+          <SelectContent align="end" alignItemWithTrigger={false}>
+            {Object.entries(sortOptions).map(([value, label]) => (
+              <SelectItem key={value} value={value}>
+                {label}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
       </div>
-      <div>
-        <Label className="text-sm font-medium mb-2 block">Max Starting Price</Label>
-        <Select value={priceMax} onValueChange={(val) => setPriceMax(val || "all")}>
-          <SelectTrigger>
-            <SelectValue placeholder="Any Price" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Any Price</SelectItem>
-            <SelectItem value="2000">Under ₹2,000</SelectItem>
-            <SelectItem value="3000">Under ₹3,000</SelectItem>
-            <SelectItem value="5000">Under ₹5,000</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-      {hasFilters && (
-        <Button variant="outline" onClick={clearFilters} className="w-full">
-          <X className="w-4 h-4 mr-2" />
-          Clear All Filters
-        </Button>
-      )}
-    </div>
-  );
 
-  return (
-    <AppShell>
-      <div className="max-w-7xl mx-auto px-4 py-6">
-        {/* Search Header */}
-        <div className="flex items-center gap-3 mb-6">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <Input
-              placeholder="Search by name, city, or puja type..."
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              className="pl-10 h-11 bg-cream-200 rounded-xl border-cream-300"
-            />
-          </div>
-
-          {/* Mobile filter trigger */}
-          <Sheet open={filterOpen} onOpenChange={setFilterOpen}>
-            <SheetTrigger className={cn(
-              "md:hidden flex h-11 w-11 items-center justify-center rounded-xl border border-cream-300 bg-cream-100 hover:bg-cream-200",
-              hasFilters && "border-maroon-800 text-maroon-800"
-            )}>
-              <SlidersHorizontal className="w-4 h-4" />
-            </SheetTrigger>
-            <SheetContent side="bottom" className="rounded-t-3xl bg-cream-100 border-cream-200">
-              <SheetTitle className="font-heading text-lg mb-4">Filters</SheetTitle>
-              <FilterContent />
-              <Button
-                className="w-full mt-6 bg-maroon-800 hover:bg-maroon-900 text-white rounded-xl"
-                onClick={() => setFilterOpen(false)}
-              >
-                Apply Filters
-              </Button>
-            </SheetContent>
-          </Sheet>
-        </div>
-
-        {/* Active filters */}
-        {hasFilters && (
-          <div className="flex flex-wrap gap-2 mb-4">
-            {selectedCity !== "all" && (
-              <Badge
-                variant="secondary"
-                className="bg-maroon-50 text-maroon-800 gap-1"
-              >
-                {selectedCity}
-                <X
-                  className="w-3 h-3 cursor-pointer"
-                  onClick={() => setSelectedCity("all")}
-                />
-              </Badge>
-            )}
-            {selectedRating !== "all" && (
-              <Badge
-                variant="secondary"
-                className="bg-maroon-50 text-maroon-800 gap-1"
-              >
-                {selectedRating}+ ⭐
-                <X
-                  className="w-3 h-3 cursor-pointer"
-                  onClick={() => setSelectedRating("all")}
-                />
-              </Badge>
-            )}
-            {selectedLanguage !== "all" && (
-              <Badge
-                variant="secondary"
-                className="bg-maroon-50 text-maroon-800 gap-1"
-              >
-                {selectedLanguage}
-                <X
-                  className="w-3 h-3 cursor-pointer"
-                  onClick={() => setSelectedLanguage("all")}
-                />
-              </Badge>
-            )}
-            {priceMax !== "all" && (
-              <Badge
-                variant="secondary"
-                className="bg-maroon-50 text-maroon-800 gap-1"
-              >
-                Under ₹{parseInt(priceMax).toLocaleString("en-IN")}
-                <X
-                  className="w-3 h-3 cursor-pointer"
-                  onClick={() => setPriceMax("all")}
-                />
-              </Badge>
-            )}
-          </div>
-        )}
-
-        <div className="flex gap-6">
-          {/* Desktop Sidebar */}
-          <aside className="hidden md:block w-64 flex-shrink-0">
-            <div className="bg-cream-100 rounded-2xl shadow-card p-5 sticky top-24">
-              <h3 className="font-heading font-semibold text-base mb-4">
-                Filters
-              </h3>
-              <FilterContent />
-            </div>
-          </aside>
-
-          {/* Results */}
-          <div className="flex-1">
-            <p className="text-sm text-gray-500 mb-4">
-              {filtered.length} purohit{filtered.length !== 1 && "s"} found
-            </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {filtered.map((p, i) => (
-                <div
-                  key={p.id}
-                  className="bg-cream-100 rounded-2xl shadow-card hover:shadow-card-hover transition-all duration-300 overflow-hidden group"
+      {/* Ceremony chips */}
+      <div className="-mx-4 mt-4 sm:-mx-6">
+        <ul
+          aria-label="Filter by ceremony"
+          className="no-scrollbar flex gap-2 overflow-x-auto px-4 pb-1 [mask-image:linear-gradient(to_right,black_calc(100%-3rem),transparent)] sm:px-6"
+        >
+          {[{ id: "all", name: "All ceremonies" }, ...categories].map((c) => {
+            const active = filters.category === c.id;
+            return (
+              <li key={c.id} className="shrink-0">
+                <button
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => updateFilters({ category: c.id })}
+                  className={cn(
+                    "h-9 rounded-full border px-4 text-sm whitespace-nowrap transition-colors",
+                    active
+                      ? "border-primary bg-primary text-primary-foreground font-medium"
+                      : "border-border-strong bg-card text-muted-foreground hover:text-foreground"
+                  )}
                 >
-                  <div className="p-5">
-                    <div className="flex items-start gap-4">
-                      <div
-                        className={`w-14 h-14 rounded-xl bg-gradient-to-br ${avatarColors[i % avatarColors.length]} flex items-center justify-center flex-shrink-0`}
-                      >
-                        <span className="text-white font-heading font-bold text-lg">
-                          {getInitials(p.name)}
-                        </span>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <Link href={`/purohit/${p.id}`}>
-                          <h3 className="font-heading font-semibold text-base text-charcoal group-hover:text-maroon-800 transition-colors">
-                            {p.name}
-                          </h3>
-                        </Link>
-                        <div className="flex items-center gap-1.5 mt-1">
-                          <Star className="w-3.5 h-3.5 fill-saffron-400 text-saffron-400" />
-                          <span className="text-sm font-semibold">
-                            {p.rating}
-                          </span>
-                          <span className="text-xs text-gray-400">
-                            ({p.reviewCount})
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
-                          <span className="flex items-center gap-1">
-                            <MapPin className="w-3 h-3" />
-                            {p.city}
-                          </span>
-                          <span>{p.experience} yrs</span>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap gap-1.5 mt-3">
-                      {p.specializations.map((s) => (
-                        <Badge
-                          key={s}
-                          variant="outline"
-                          className="text-[10px] border-cream-300 text-gray-500"
-                        >
-                          {s}
-                        </Badge>
-                      ))}
-                    </div>
-                    <div className="flex items-center justify-between mt-4 pt-3 border-t border-cream-200">
-                      <span className="text-sm font-semibold flex items-center gap-0.5">
-                        <IndianRupee className="w-3 h-3" />
-                        {p.priceRange.min.toLocaleString("en-IN")}
-                        <span className="font-normal text-xs text-gray-400 ml-1">
-                          onwards
-                        </span>
-                      </span>
-                      <Link href={`/book/${p.id}`}>
-                        <Button
-                          size="sm"
-                          className="bg-maroon-800 hover:bg-maroon-900 text-white rounded-lg text-xs h-8"
-                        >
-                          Book Now
-                        </Button>
-                      </Link>
-                    </div>
-                  </div>
-                </div>
+                  {c.name}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+
+      <div className="mt-6 grid gap-8 lg:grid-cols-[16rem_1fr]">
+        {/* Desktop filters */}
+        <aside className="hidden lg:block" aria-label="Filters">
+          <div className="sticky top-[calc(var(--header-height)+1.5rem)] rounded-2xl border border-border bg-card p-5">
+            <div className="mb-5 flex items-center justify-between">
+              <h2 className="text-base font-semibold text-foreground">Filters</h2>
+              {sidebarFilterCount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setFilters((f) => ({ ...defaultFilters, category: f.category }))}
+                  className="text-sm font-medium text-primary hover:text-primary-hover"
+                >
+                  Reset
+                </button>
+              )}
+            </div>
+            <FilterPanel filters={filters} onChange={updateFilters} />
+          </div>
+        </aside>
+
+        <section aria-labelledby="results-heading" className="min-w-0">
+          <div className="mb-4 flex flex-wrap items-center gap-2">
+            <h2 id="results-heading" className="mr-2 text-sm text-muted-foreground" aria-live="polite">
+              <span className="font-semibold text-foreground">{results.length}</span>{" "}
+              {results.length === 1 ? "purohit" : "purohits"} found
+            </h2>
+            {activeChips.map((chip) => (
+              <button
+                key={chip.key}
+                type="button"
+                onClick={() => updateFilters({ [chip.key]: defaultFilters[chip.key] } as Partial<Filters>)}
+                className="inline-flex h-7 items-center gap-1 rounded-full border border-primary/40 bg-primary/10 pr-2 pl-3 text-xs font-medium text-primary transition-colors hover:bg-primary/20"
+              >
+                {chip.label}
+                <X className="size-3.5" aria-hidden />
+                <span className="sr-only">Remove filter</span>
+              </button>
+            ))}
+          </div>
+
+          {results.length > 0 ? (
+            <div className="grid gap-4 sm:grid-cols-2">
+              {results.map((p) => (
+                <PurohitCard key={p.id} purohit={p} className="animate-fade-in" />
               ))}
             </div>
-            {filtered.length === 0 && (
-              <div className="text-center py-20">
-                <p className="text-4xl mb-3">🔍</p>
-                <h3 className="font-heading font-semibold text-lg text-charcoal">
-                  No purohits found
-                </h3>
-                <p className="text-sm text-gray-500 mt-1">
-                  Try adjusting your filters or search query
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
+          ) : (
+            <EmptyState
+              icon={SearchX}
+              title="No purohits match your search"
+              description="Try a different ceremony or city, or remove a few filters to see more results."
+              action={
+                hasAnyFilter && (
+                  <Button variant="outline" onClick={clearAll}>
+                    Clear all filters
+                  </Button>
+                )
+              }
+            />
+          )}
+        </section>
       </div>
+    </div>
+  );
+}
+
+function SearchSkeleton() {
+  return (
+    <div className="container-page py-6 sm:py-10">
+      <Skeleton className="h-9 w-64" />
+      <Skeleton className="mt-3 h-5 w-80 max-w-full" />
+      <Skeleton className="mt-6 h-12 w-full rounded-xl" />
+      <div className="mt-6 grid gap-4 sm:grid-cols-2">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <Skeleton key={i} className="h-64 rounded-2xl" />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export default function SearchPage() {
+  return (
+    <AppShell footer>
+      <Suspense fallback={<SearchSkeleton />}>
+        <SearchContent />
+      </Suspense>
     </AppShell>
   );
 }

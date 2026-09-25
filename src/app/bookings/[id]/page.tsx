@@ -1,241 +1,389 @@
 "use client";
 
+import Link from "next/link";
+import { useParams } from "next/navigation";
+import { useState } from "react";
+import {
+  CalendarDays,
+  Check,
+  CircleX,
+  Clock,
+  Copy,
+  FileQuestion,
+  Headphones,
+  MapPin,
+  Phone,
+  RotateCcw,
+  Star,
+  StickyNote,
+} from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
 import { useApp } from "@/lib/booking-context";
-import { purohits, services } from "@/lib/mock-data";
-import { useParams } from "next/navigation";
-import Link from "next/link";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
-import {
-  ChevronLeft,
-  CalendarDays,
-  Clock,
-  MapPin,
-  IndianRupee,
-  Phone,
-  CheckCircle2,
-  Circle,
-  Loader2,
-} from "lucide-react";
+import { getPurohit, getService } from "@/lib/mock-data";
+import { bookingLifecycle, bookingStatusMeta, isActiveBooking } from "@/lib/booking-status";
+import { formatDate, formatINR } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { toast } from "@/components/ui/toast";
+import { BackLink } from "@/components/shared/page-header";
+import { DetailRow, Panel, PanelHeader } from "@/components/shared/panel";
+import { EmptyState } from "@/components/shared/empty-state";
+import { PurohitAvatar } from "@/components/shared/purohit-avatar";
+import { RatingBadge, RatingStars } from "@/components/shared/rating";
+import { ServiceIcon } from "@/components/shared/service-icon";
+import { StatusBadge } from "@/components/shared/status-badge";
 
-const statusStyles: Record<string, { bg: string; text: string; label: string }> = {
-  pending: { bg: "bg-amber-100", text: "text-amber-700", label: "Pending" },
-  accepted: { bg: "bg-blue-100", text: "text-blue-700", label: "Accepted" },
-  "on-the-way": { bg: "bg-purple-100", text: "text-purple-700", label: "On the Way" },
-  "in-progress": { bg: "bg-cyan-100", text: "text-cyan-700", label: "In Progress" },
-  completed: { bg: "bg-emerald-100", text: "text-emerald-700", label: "Completed" },
-  cancelled: { bg: "bg-red-100", text: "text-red-700", label: "Cancelled" },
-};
+function ProgressTracker({ current }: { current: number }) {
+  return (
+    <ol className="grid grid-cols-5 gap-1" aria-label="Booking progress">
+      {bookingLifecycle.map((stage, i) => {
+        const done = i < current;
+        const active = i === current;
+        return (
+          <li key={stage.status} className="flex flex-col items-center gap-2 text-center" aria-current={active ? "step" : undefined}>
+            <div className="relative flex w-full items-center justify-center">
+              {i > 0 && (
+                <span
+                  aria-hidden
+                  className={cn("absolute right-1/2 h-0.5 w-full", i <= current ? "bg-primary" : "bg-border-strong")}
+                />
+              )}
+              <span
+                className={cn(
+                  "relative z-10 flex size-7 items-center justify-center rounded-full text-xs font-semibold",
+                  done && "bg-primary text-primary-foreground",
+                  active && "bg-background text-primary ring-2 ring-primary",
+                  !done && !active && "bg-surface-strong text-muted-foreground"
+                )}
+              >
+                {done ? <Check className="size-3.5" /> : active ? <span className="size-2 animate-pulse-soft rounded-full bg-primary" /> : i + 1}
+              </span>
+            </div>
+            <span className={cn("text-[0.6875rem] leading-tight sm:text-xs", done || active ? "text-foreground" : "text-muted-foreground")}>
+              {stage.label}
+            </span>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+function ReviewPanel({ bookingId, purohitName }: { bookingId: string; purohitName: string }) {
+  const { reviews, submitReview } = useApp();
+  const existing = reviews[bookingId];
+  const [rating, setRating] = useState(0);
+  const [hover, setHover] = useState(0);
+  const [comment, setComment] = useState("");
+
+  if (existing) {
+    return (
+      <Panel>
+        <PanelHeader title="Your review" icon={Star} />
+        <RatingStars value={existing.rating} size="md" />
+        {existing.comment && <p className="mt-3 text-sm leading-relaxed text-foreground/85">{existing.comment}</p>}
+        <p className="mt-3 text-xs text-muted-foreground">Thank you — your feedback helps other families.</p>
+      </Panel>
+    );
+  }
+
+  const labels = ["", "Poor", "Fair", "Good", "Very good", "Excellent"];
+
+  return (
+    <Panel>
+      <PanelHeader title="How was your ceremony?" description={`Rate your experience with ${purohitName}.`} icon={Star} />
+      <div className="flex items-center gap-3">
+        <div role="radiogroup" aria-label="Rating" className="flex gap-1" onMouseLeave={() => setHover(0)}>
+          {[1, 2, 3, 4, 5].map((n) => (
+            <button
+              key={n}
+              type="button"
+              role="radio"
+              aria-checked={rating === n}
+              aria-label={`${n} star${n > 1 ? "s" : ""}`}
+              onMouseEnter={() => setHover(n)}
+              onClick={() => setRating(n)}
+              className="rounded-md p-0.5 transition-transform active:scale-90"
+            >
+              <Star
+                className={cn(
+                  "size-8 transition-colors",
+                  n <= (hover || rating) ? "fill-primary text-primary" : "text-border-strong"
+                )}
+              />
+            </button>
+          ))}
+        </div>
+        <span className="text-sm font-medium text-muted-foreground">{labels[hover || rating]}</span>
+      </div>
+      <Textarea
+        value={comment}
+        onChange={(e) => setComment(e.target.value.slice(0, 500))}
+        placeholder="What stood out? Punctuality, explanations, chanting…"
+        aria-label="Review"
+        className="mt-4"
+      />
+      <Button
+        className="mt-4"
+        disabled={!rating}
+        onClick={() => {
+          submitReview(bookingId, { rating, comment: comment.trim() });
+          toast.success("Review submitted", "Thank you for sharing your experience.");
+        }}
+      >
+        Submit review
+      </Button>
+    </Panel>
+  );
+}
 
 export default function BookingDetailPage() {
-  const { id } = useParams();
+  const { id } = useParams<{ id: string }>();
   const { bookings, cancelBooking } = useApp();
+  const [confirmCancel, setConfirmCancel] = useState(false);
   const booking = bookings.find((b) => b.id === id);
 
   if (!booking) {
     return (
       <AppShell>
-        <div className="text-center py-20">
-          <p className="text-4xl mb-3">📋</p>
-          <h2 className="font-heading font-semibold text-xl">
-            Booking not found
-          </h2>
-          <Link
-            href="/bookings"
-            className="text-maroon-800 text-sm mt-2 block"
-          >
-            ← Back to Bookings
-          </Link>
+        <div className="container-page py-16">
+          <EmptyState
+            icon={FileQuestion}
+            title="Booking not found"
+            description="We couldn't find a booking with this ID. It may belong to a different account."
+            action={
+              <Link href="/bookings" className={buttonVariants()}>
+                View my bookings
+              </Link>
+            }
+          />
         </div>
       </AppShell>
     );
   }
 
-  const purohit = purohits.find((p) => p.id === booking.purohitId);
-  const service = services.find((s) => s.id === booking.serviceId);
-  const status = statusStyles[booking.status] || statusStyles.pending;
+  const purohit = getPurohit(booking.purohitId);
+  const service = getService(booking.serviceId);
+  const meta = bookingStatusMeta[booking.status];
+  const active = isActiveBooking(booking.status);
+  const stageIndex = bookingLifecycle.findIndex((s) => s.status === booking.status);
+  const serviceFee = service?.basePrice ?? booking.totalAmount;
+  const platformFee = Math.max(0, booking.totalAmount - serviceFee);
+  const paymentState =
+    booking.status === "cancelled"
+      ? { label: "Refund initiated", className: "text-warning" }
+      : booking.paymentMethod === "Pay later"
+        ? { label: "Due after ceremony", className: "text-muted-foreground" }
+        : { label: "Paid", className: "text-success" };
 
   return (
     <AppShell>
-      <div className="max-w-2xl mx-auto px-4 py-6">
-        <Link
-          href="/bookings"
-          className="inline-flex items-center gap-1 text-sm text-cream-400 hover:text-charcoal mb-4"
-        >
-          <ChevronLeft className="w-4 h-4" />
-          Back to Bookings
-        </Link>
+      <div className="container-page max-w-5xl py-6 sm:py-10">
+        <BackLink href="/bookings" label="My bookings" />
 
         {/* Header */}
-        <div className="bg-cream-100 rounded-2xl shadow-card p-5 mb-4">
-          <div className="flex items-start justify-between mb-4">
-            <div>
-              <h1 className="font-heading font-bold text-xl text-charcoal">
-                {service?.name || "Puja Service"}
-              </h1>
-              <p className="text-sm text-gray-500 mt-1 font-mono">
-                {booking.id}
-              </p>
+        <Panel className="mt-4">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex items-start gap-4">
+              <ServiceIcon name={service?.icon} size="lg" />
+              <div className="min-w-0">
+                <h1 className="text-xl font-semibold text-foreground sm:text-2xl">{service?.name ?? "Puja"}</h1>
+                <button
+                  type="button"
+                  onClick={() =>
+                    navigator.clipboard?.writeText(booking.id).then(
+                      () => toast.success("Booking ID copied"),
+                      () => undefined
+                    )
+                  }
+                  className="mt-1 inline-flex items-center gap-1.5 rounded-md font-mono text-sm text-muted-foreground transition-colors hover:text-foreground"
+                  aria-label={`Copy booking ID ${booking.id}`}
+                >
+                  {booking.id}
+                  <Copy className="size-3.5" />
+                </button>
+              </div>
             </div>
-            <Badge className={cn("border-0 text-sm", status.bg, status.text)}>
-              {status.label}
-            </Badge>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="bg-cream-200 rounded-xl p-3">
-              <div className="flex items-center gap-2 text-xs text-gray-500 mb-1">
-                <CalendarDays className="w-3 h-3" />
-                Date
-              </div>
-              <div className="font-medium text-sm">{booking.date}</div>
-            </div>
-            <div className="bg-cream-200 rounded-xl p-3">
-              <div className="flex items-center gap-2 text-xs text-gray-500 mb-1">
-                <Clock className="w-3 h-3" />
-                Time
-              </div>
-              <div className="font-medium text-sm">{booking.timeSlot}</div>
-            </div>
-            <div className="bg-cream-200 rounded-xl p-3">
-              <div className="flex items-center gap-2 text-xs text-gray-500 mb-1">
-                <MapPin className="w-3 h-3" />
-                Location
-              </div>
-              <div className="font-medium text-sm">{booking.city}</div>
-            </div>
-            <div className="bg-cream-200 rounded-xl p-3">
-              <div className="flex items-center gap-2 text-xs text-gray-500 mb-1">
-                <IndianRupee className="w-3 h-3" />
-                Amount
-              </div>
-              <div className="font-semibold text-sm text-maroon-800">
-                ₹{booking.totalAmount.toLocaleString("en-IN")}
-              </div>
+            <div className="sm:text-right">
+              <StatusBadge status={booking.status} />
+              <p className="mt-1.5 text-sm text-muted-foreground">{meta.description}</p>
             </div>
           </div>
 
-          <Separator className="my-4" />
-
-          {/* Purohit Info */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-maroon-700 to-maroon-900 flex items-center justify-center">
-                <span className="text-white font-bold text-sm">
-                  {purohit?.name
-                    .split(" ")
-                    .map((w) => w[0])
-                    .join("")
-                    .slice(0, 2)}
-                </span>
+          <div className="mt-6 border-t border-border pt-6">
+            {booking.status === "cancelled" ? (
+              <div className="flex items-start gap-3 rounded-xl border border-destructive/25 bg-destructive/8 p-4 text-sm">
+                <CircleX className="mt-0.5 size-5 shrink-0 text-destructive" />
+                <div>
+                  <div className="font-medium text-foreground">This booking was cancelled</div>
+                  <p className="mt-0.5 text-muted-foreground">
+                    Any amount paid will be refunded to your original payment method within 3–5 working days.
+                  </p>
+                </div>
               </div>
-              <div>
-                <div className="font-medium text-sm">{purohit?.name}</div>
-                <div className="text-xs text-gray-400">{purohit?.city}</div>
-              </div>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              className="rounded-lg border-cream-300"
-            >
-              <Phone className="w-3 h-3 mr-1" />
-              Call
-            </Button>
+            ) : (
+              <ProgressTracker current={stageIndex} />
+            )}
           </div>
+        </Panel>
 
-          {booking.address && (
-            <>
-              <Separator className="my-4" />
-              <div>
-                <div className="text-xs text-gray-500 mb-1">Full Address</div>
-                <div className="text-sm">{booking.address}</div>
-              </div>
-            </>
-          )}
-
-          {booking.notes && (
-            <>
-              <Separator className="my-4" />
-              <div>
-                <div className="text-xs text-gray-500 mb-1">Notes</div>
-                <div className="text-sm">{booking.notes}</div>
-              </div>
-            </>
-          )}
-        </div>
-
-        {/* Status Timeline */}
-        <div className="bg-cream-100 rounded-2xl shadow-card p-5 mb-4">
-          <h2 className="font-heading font-semibold text-lg mb-4">
-            Booking Status
-          </h2>
-          <div className="space-y-0">
-            {booking.timeline.map((item, i) => {
-              const isLast = i === booking.timeline.length - 1;
-              const isCompleted = !isLast || booking.status === "completed";
-              return (
-                <div key={i} className="flex gap-4">
-                  {/* Line + Dot */}
-                  <div className="flex flex-col items-center">
-                    <div
-                      className={cn(
-                        "w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0",
-                        isCompleted
-                          ? "bg-emerald-100"
-                          : isLast
-                            ? "bg-maroon-100"
-                            : "bg-cream-200"
-                      )}
-                    >
-                      {isCompleted ? (
-                        <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                      ) : isLast ? (
-                        <Loader2 className="w-4 h-4 text-maroon-800 animate-spin" />
-                      ) : (
-                        <Circle className="w-4 h-4 text-gray-300" />
-                      )}
-                    </div>
-                    {i < booking.timeline.length - 1 && (
-                      <div
-                        className={cn(
-                          "w-0.5 h-12",
-                          isCompleted ? "bg-emerald-200" : "bg-cream-200"
-                        )}
-                      />
-                    )}
-                  </div>
-
-                  {/* Content */}
-                  <div className="pb-8">
-                    <div className="font-medium text-sm">{item.status}</div>
-                    <div className="text-xs text-gray-500 mt-0.5">
-                      {item.description}
-                    </div>
-                    <div className="text-xs text-gray-400 mt-1">
-                      {item.time}
-                    </div>
+        <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_20rem] lg:items-start">
+          <div className="min-w-0 space-y-6">
+            <Panel>
+              <PanelHeader title="Ceremony details" />
+              <dl className="grid gap-4 sm:grid-cols-2">
+                <div className="flex gap-3">
+                  <CalendarDays className="mt-0.5 size-5 shrink-0 text-primary" />
+                  <div>
+                    <dt className="text-xs text-muted-foreground">Date</dt>
+                    <dd className="mt-0.5 font-medium text-foreground">{formatDate(booking.date, "long")}</dd>
                   </div>
                 </div>
-              );
-            })}
+                <div className="flex gap-3">
+                  <Clock className="mt-0.5 size-5 shrink-0 text-primary" />
+                  <div>
+                    <dt className="text-xs text-muted-foreground">Time</dt>
+                    <dd className="mt-0.5 font-medium text-foreground">{booking.timeSlot}</dd>
+                  </div>
+                </div>
+                <div className="flex gap-3 sm:col-span-2">
+                  <MapPin className="mt-0.5 size-5 shrink-0 text-primary" />
+                  <div>
+                    <dt className="text-xs text-muted-foreground">Venue</dt>
+                    <dd className="mt-0.5 font-medium text-foreground">{booking.address}</dd>
+                  </div>
+                </div>
+                {booking.notes && (
+                  <div className="flex gap-3 sm:col-span-2">
+                    <StickyNote className="mt-0.5 size-5 shrink-0 text-primary" />
+                    <div>
+                      <dt className="text-xs text-muted-foreground">Your notes</dt>
+                      <dd className="mt-0.5 text-foreground/90">{booking.notes}</dd>
+                    </div>
+                  </div>
+                )}
+              </dl>
+            </Panel>
+
+            {booking.status === "completed" && purohit && (
+              <ReviewPanel bookingId={booking.id} purohitName={purohit.name} />
+            )}
+
+            <Panel>
+              <PanelHeader title="Activity" />
+              <ol className="relative space-y-6 before:absolute before:top-2 before:bottom-2 before:left-[0.4375rem] before:w-px before:bg-border-strong">
+                {[...booking.timeline].reverse().map((item, i) => (
+                  <li key={`${item.status}-${i}`} className="relative flex gap-4 pl-0">
+                    <span
+                      aria-hidden
+                      className={cn(
+                        "relative z-10 mt-1.5 size-[0.9375rem] shrink-0 rounded-full border-2",
+                        i === 0 ? "border-primary bg-primary/30" : "border-border-strong bg-card"
+                      )}
+                    />
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-baseline gap-x-2">
+                        <span className={cn("font-medium", i === 0 ? "text-foreground" : "text-foreground/80")}>
+                          {item.status}
+                        </span>
+                        <span className="text-xs text-muted-foreground">{item.time}</span>
+                      </div>
+                      <p className="mt-0.5 text-sm text-muted-foreground">{item.description}</p>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            </Panel>
+          </div>
+
+          <div className="space-y-6">
+            {purohit && (
+              <Panel>
+                <div className="flex items-center gap-3">
+                  <PurohitAvatar name={purohit.name} size="lg" verified />
+                  <div className="min-w-0">
+                    <div className="text-xs text-muted-foreground">Your purohit</div>
+                    <div className="truncate font-semibold text-foreground">{purohit.name}</div>
+                    <RatingBadge rating={purohit.rating} className="text-xs" />
+                  </div>
+                </div>
+                <div className="mt-5 grid grid-cols-2 gap-2">
+                  <a href="tel:+918001234567" className={buttonVariants({ variant: "secondary", size: "sm" })}>
+                    <Phone /> Call
+                  </a>
+                  <Link href={`/purohit/${purohit.id}`} className={buttonVariants({ variant: "outline", size: "sm" })}>
+                    Profile
+                  </Link>
+                </div>
+                <p className="mt-3 text-xs text-subtle-foreground">
+                  Calls are connected through a private number to protect both parties.
+                </p>
+              </Panel>
+            )}
+
+            <Panel>
+              <PanelHeader title="Payment" />
+              <dl className="space-y-2.5">
+                <DetailRow label="Ceremony fee">{formatINR(serviceFee)}</DetailRow>
+                <DetailRow label="Samagri kit">
+                  <span className="text-success">Included</span>
+                </DetailRow>
+                {platformFee > 0 && <DetailRow label="Platform fee">{formatINR(platformFee)}</DetailRow>}
+                <div className="flex items-center justify-between border-t border-border pt-3">
+                  <dt className="font-medium text-foreground">Total</dt>
+                  <dd className="font-heading text-lg font-semibold text-foreground">{formatINR(booking.totalAmount)}</dd>
+                </div>
+                <DetailRow label="Method">{booking.paymentMethod}</DetailRow>
+                <DetailRow label="Status">
+                  <span className={paymentState.className}>{paymentState.label}</span>
+                </DetailRow>
+              </dl>
+            </Panel>
+
+            <div className="space-y-2">
+              {active ? (
+                <Button variant="destructive" className="w-full" onClick={() => setConfirmCancel(true)}>
+                  <CircleX /> Cancel booking
+                </Button>
+              ) : (
+                purohit?.available && (
+                  <Link
+                    href={`/book/${booking.purohitId}?service=${booking.serviceId}`}
+                    className={cn(buttonVariants(), "w-full")}
+                  >
+                    <RotateCcw /> Book again
+                  </Link>
+                )
+              )}
+              <a href="tel:+918001234567" className={cn(buttonVariants({ variant: "ghost" }), "w-full")}>
+                <Headphones /> Get help with this booking
+              </a>
+            </div>
           </div>
         </div>
-
-        {/* Actions */}
-        {!["completed", "cancelled"].includes(booking.status) && (
-          <Button
-            variant="outline"
-            onClick={() => cancelBooking(booking.id)}
-            className="w-full rounded-xl border-red-200 text-red-600 hover:bg-red-900/30 hover:text-red-400"
-          >
-            Cancel Booking
-          </Button>
-        )}
       </div>
+
+      <ConfirmDialog
+        open={confirmCancel}
+        onOpenChange={setConfirmCancel}
+        title="Cancel this booking?"
+        description={
+          <>
+            {service?.name} with {purohit?.name} on {formatDate(booking.date, "weekday")}. Any amount paid will
+            be refunded within 3–5 working days.
+          </>
+        }
+        confirmLabel="Yes, cancel booking"
+        cancelLabel="Keep booking"
+        tone="destructive"
+        icon={<CircleX className="size-5" />}
+        onConfirm={() => {
+          cancelBooking(booking.id);
+          toast.success("Booking cancelled", "Your refund has been initiated.");
+        }}
+      />
     </AppShell>
   );
 }
