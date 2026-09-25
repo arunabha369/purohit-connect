@@ -202,7 +202,7 @@ function AdminConsole() {
   const bookings = useMemo(() => [...db.bookings].sort((a, b) => b.createdAt.localeCompare(a.createdAt)), [db.bookings]);
   const purohits = useMemo(() => getAllPurohits(db).map((p) => toPurohitView(db, p)), [db]);
   const pendingApps = db.applications.filter((a) => a.status === "pending");
-  const live = bookings.filter((b) => b.status !== "cancelled");
+  const live = useMemo(() => bookings.filter((b) => b.status !== "cancelled"), [bookings]);
   const gmv = live.reduce((s, b) => s + b.pricing.total, 0);
   const platformRevenue = live.reduce((s, b) => s + b.pricing.platformFee - b.pricing.discount, 0);
 

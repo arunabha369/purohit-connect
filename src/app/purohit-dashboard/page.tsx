@@ -231,7 +231,7 @@ function Dashboard() {
   const upcoming = mine
     .filter((b) => ["accepted", "on-the-way", "in-progress"].includes(b.status))
     .sort((a, b) => a.date.localeCompare(b.date) || a.timeSlot.localeCompare(b.timeSlot));
-  const completed = mine.filter((b) => b.status === "completed");
+  const completed = useMemo(() => mine.filter((b) => b.status === "completed"), [mine]);
 
   const monthStart = toISODate(startOfMonth(now));
   const earnedThisMonth = completed.filter((b) => b.date >= monthStart).reduce((s, b) => s + purohitEarning(b.pricing), 0);

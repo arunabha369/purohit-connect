@@ -23,6 +23,8 @@ All three workspaces share one data store, so a booking made as a family appears
 
 ## Getting started
 
+Built on Next.js 16 and React 19. Requires Node.js 20.9 or later.
+
 ```bash
 npm install
 npm run dev          # http://localhost:3000
@@ -30,7 +32,7 @@ npm run dev          # http://localhost:3000
 
 | Script | Purpose |
 | --- | --- |
-| `npm run lint` | ESLint |
+| `npm run lint` | ESLint (flat config in `eslint.config.mjs`, including the React Compiler rules) |
 | `npm run typecheck` | TypeScript (`tsc --noEmit`) |
 | `npm test` | Unit tests (Vitest) for pricing, availability, booking rules, CSV, calendar and redirects |
 | `npm run build` | Production build |
@@ -76,7 +78,6 @@ This build is production-grade on the frontend, but some pieces need your accoun
 - **Payments** — UPI/card payments are simulated. Integrate a gateway (e.g. Razorpay) and issue refunds through it.
 - **Contact details** — `1800-123-4567` and the `purohitconnect.in` email addresses are placeholders.
 - **Legal & policy copy** — Terms, Privacy, the cancellation/refund policy and partner promises (weekly payouts, verification timelines) are templates; have them reviewed.
-- **Next.js upgrade** — `next@14.2.35` is the last 14.x release; remaining `npm audit` advisories are fixed only in Next 15+.
 - **Content Security Policy** — other security headers are set in `next.config.mjs`; add a CSP once third-party scripts (payments, analytics) are known.
 
 ## Design system

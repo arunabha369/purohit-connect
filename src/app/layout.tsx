@@ -51,7 +51,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en-IN" className={`dark ${inter.variable} ${outfit.variable}`}>
+    <html lang="en-IN" data-scroll-behavior="smooth" className={`dark ${inter.variable} ${outfit.variable}`}>
       <body className="min-h-dvh bg-background font-sans text-foreground antialiased">
         <ToastProvider>{children}</ToastProvider>
       </body>
